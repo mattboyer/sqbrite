@@ -1,0 +1,13 @@
+blessings
+coverage
+coveralls
+ipdb
+mock
+nose
+pep8
+pylint
+pyxdg
+requests
+setuptools
+sqlalchemy
+tox
