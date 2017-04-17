@@ -1,7 +1,7 @@
-#!/usr/bin/env python3
-
 from . import constants
+from . import PROJECT_DESCRIPTION
 
+import argparse
 import collections
 import csv
 import logging
@@ -11,13 +11,12 @@ import pdb
 import re
 import stat
 import struct
-import sys
 import tempfile
 
 
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s')
 _LOGGER = logging.getLogger('SQLite recovery')
-_LOGGER.setLevel(logging.DEBUG)
+_LOGGER.setLevel(logging.INFO)
 
 
 SQLite_header = collections.namedtuple('SQLite_header', (
@@ -1350,7 +1349,28 @@ def decode_twos_complement(encoded, bit_length):
     return value
 
 
+def gen_output_dir(db_path):
+    db_abspath = os.path.abspath(db_path)
+    db_dir, db_name = os.path.split(db_abspath)
+
+    munged_name = db_name.replace('.', '_')
+    out_dir = os.path.join(db_dir, munged_name)
+    if not os.path.exists(out_dir):
+        return out_dir
+    suffix = 1
+    while suffix <= 10:
+        out_dir = os.path.join(db_dir, "{}_{}".format(munged_name, suffix))
+        if not os.path.exists(out_dir):
+            return out_dir
+        suffix += 1
+    raise SystemError(
+        "Unreasonable number of output directories for {}".format(db_path)
+    )
+
+
 def process_db(db_path, out_dir):
+    out_dir = out_dir or gen_output_dir(db_path)
+
     _LOGGER.info("Processing %s", db_path)
 
     db = SQLite_DB(db_path)
@@ -1391,5 +1411,24 @@ def process_db(db_path, out_dir):
 
 
 def main():
-    # TODO Use argparse!
-    process_db(sys.argv[1], sys.argv[2])
+    parser = argparse.ArgumentParser(description=PROJECT_DESCRIPTION)
+    parser.add_argument(
+        'sqlite_path',
+        help='sqlite3 file path'
+    )
+    parser.add_argument(
+        'output_dir',
+        nargs='?',
+        default=None,
+        help='Output directory'
+    )
+    parser.add_argument(
+        '-v', '--verbose',
+        action='count',
+        help='Give *A LOT* more output.'
+    )
+    args = parser.parse_args()
+    if args.verbose:
+        _LOGGER.setLevel(logging.DEBUG)
+
+    process_db(args.sqlite_path, args.output_dir)
