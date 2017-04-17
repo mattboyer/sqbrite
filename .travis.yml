@@ -1,0 +1,16 @@
+language: python
+sudo: false
+
+python:
+        - "3.5"
+        - "3.6"
+
+before_script:
+        - pip freeze
+
+script:
+        - tox -v
+
+after_success:
+        - cd ${TRAVIS_BUILD_DIR}
+        - source .tox/py3/bin/activate; sqbrite -h
