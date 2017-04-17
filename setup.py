@@ -42,9 +42,12 @@ setup(
         'Development Status :: 2 - Pre-Alpha',
     ],
     packages=package_names(),
+    # Packaging data files in Python is a complete shitshow
+    # We need this *AND* an "include" line in MANIFEST.IN
+    include_package_data=True,
     package_dir={PROJECT_NAME: 'src'},
     install_requires=[
-        'blessings',
+        'pyxdg',
     ],
     entry_points={
         'console_scripts': [

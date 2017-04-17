@@ -20,5 +20,15 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import os
+import xdg.BaseDirectory
+
 PROJECT_NAME = 'sqbrite'
 PROJECT_DESCRIPTION = 'SQ-Brite is a data recovery tool for SQLite databases'
+
+USER_JSON_PATH = os.path.join(
+    xdg.BaseDirectory.save_data_path(PROJECT_NAME),
+    PROJECT_NAME + '.json'
+)
+
+BUILTIN_JSON = 'magic/sqbrite.json'

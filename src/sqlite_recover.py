@@ -21,11 +21,13 @@
 # SOFTWARE.
 
 from . import constants
-from . import PROJECT_DESCRIPTION
+from . import PROJECT_NAME, PROJECT_DESCRIPTION, USER_JSON_PATH, BUILTIN_JSON
 
 import argparse
+import base64
 import collections
 import csv
+import json
 import logging
 import os
 import os.path
@@ -34,6 +36,7 @@ import re
 import stat
 import struct
 import tempfile
+import pkg_resources
 
 
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s')
@@ -101,6 +104,9 @@ SQLite_master_record = collections.namedtuple('SQLite_master_record', (
 ))
 
 
+heuristics = {}
+
+
 def heuristic_factory(magic, offset):
     assert(isinstance(magic, bytes))
     assert(isinstance(offset, int))
@@ -120,9 +126,27 @@ def heuristic_factory(magic, offset):
     return generic_heuristic
 
 
-heuristics = {
-    'moz_places': heuristic_factory(b'\x00(.{3})\x08\x08\x08', 1),
-}
+def load_heuristics():
+
+    def _load_from_json(raw_json):
+        if isinstance(raw_json, bytes):
+            raw_json = raw_json.decode('utf-8')
+        for table_name, heuristic_params in json.loads(raw_json).items():
+            magic = base64.standard_b64decode(
+                heuristic_params['magic']
+            )
+            heuristics[table_name] = heuristic_factory(
+                magic, heuristic_params['offset']
+            )
+            _LOGGER.debug("Loaded heuristics for \"%s\"", table_name)
+
+    with pkg_resources.resource_stream(PROJECT_NAME, BUILTIN_JSON) as builtin:
+        _load_from_json(builtin.read())
+
+    if not os.path.exists(USER_JSON_PATH):
+        return
+    with open(USER_JSON_PATH, 'r') as user_json:
+        _load_from_json(user_json.read())
 
 
 class IndexDict(dict):
@@ -1453,4 +1477,5 @@ def main():
     if args.verbose:
         _LOGGER.setLevel(logging.DEBUG)
 
+    load_heuristics()
     process_db(args.sqlite_path, args.output_dir)
