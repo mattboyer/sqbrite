@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import constants
+from . import constants
 
 import collections
 import csv
@@ -145,6 +145,32 @@ class SQLite_DB(object):
     @property
     def tables(self):
         return self._tables
+
+    @property
+    def freelist_leaves(self):
+        return self._freelist_leaves
+
+    @property
+    def table_columns(self):
+        return self._table_columns
+
+    def page_bytes(self, page_idx):
+        try:
+            return self._page_cache[page_idx]
+        except KeyError:
+            raise ValueError("No cache for page %d", page_idx)
+
+    def map_table_page(self, page_idx, table):
+        assert isinstance(page_idx, int)
+        assert isinstance(table, Table)
+        self._page_tables[page_idx] = table
+
+    def get_page_table(self, page_idx):
+        assert isinstance(page_idx, int)
+        try:
+            return self._page_tables[page_idx]
+        except KeyError:
+            return None
 
     def __repr__(self):
         return '<SQLite DB, page count: {} | page size: {}>'.format(
@@ -442,15 +468,18 @@ class SQLite_DB(object):
             root.parent is None for root in self._table_roots.values()
         )
 
-        self._page_tables[1] = 'sqlite_master'
+        self.map_table_page(1, master_table)
         self._table_roots['sqlite_master'] = self.pages[1]
 
         for table_name, rootpage in self._table_roots.items():
             try:
                 table_obj = Table(table_name, self, rootpage)
-            except Exception as ex:
+            except Exception as ex:  # pylint:disable=W0703
                 pdb.set_trace()
-                pass
+                _LOGGER.warning(
+                    "Caught %r while instantiating table object for \"%s\"",
+                    ex, table_name
+                )
             else:
                 self._tables[table_name] = table_obj
 
@@ -474,8 +503,8 @@ class SQLite_DB(object):
                     "Reparenting %r to table \"%s\"",
                     page, root_table.name
                 )
-                root_table._leaves.append(page)
-                self._page_tables[page.idx] = root_table
+                root_table.add_leaf(page)
+                self.map_table_page(page.idx, root_table)
                 reparented_pages.append(page)
 
         if reparented_pages:
@@ -508,7 +537,7 @@ class Table(object):
         self._root = rootpage
         self._leaves = []
         try:
-            self._columns = self._db._table_columns[self.name]
+            self._columns = self._db.table_columns[self.name]
         except KeyError:
             self._columns = None
 
@@ -519,6 +548,9 @@ class Table(object):
     @property
     def name(self):
         return self._name
+
+    def add_leaf(self, leaf_page):
+        self._leaves.append(leaf_page)
 
     @property
     def columns(self):
@@ -556,6 +588,7 @@ class Table(object):
                 page_ptr, max_row_in_page = table_page.cells[cell_idx]
 
                 page = self._db.pages[page_ptr]
+                _LOGGER.debug("B-Tree cell: (%r, %d)", page, max_row_in_page)
                 table_pages.append(page)
                 if page.page_type == 'Table Interior':
                     page_queue.append(page)
@@ -564,7 +597,7 @@ class Table(object):
 
         assert(all(p.page_type == 'Table Leaf' for p in self._leaves))
         for page in table_pages:
-            self._db._page_tables[page.idx] = self
+            self._db.map_table_page(page.idx, self)
 
     @property
     def leaves(self):
@@ -573,8 +606,8 @@ class Table(object):
 
     def recover_records(self):
         for page in self.leaves:
-            assert(isinstance(page, BTreePage))
-            if not page._freeblocks:
+            assert isinstance(page, BTreePage)
+            if not page.freeblocks:
                 continue
 
             _LOGGER.info("%r", page)
@@ -605,12 +638,12 @@ class Table(object):
                     )
                     writer.writerow(dict(zip(self._columns, values_iter)))
 
-                if not leaf_page._recovered_records:
+                if not leaf_page.recovered_records:
                     continue
 
                 # Recovered records are in an unordered set because their rowid
                 # has been lost, making sorting impossible
-                for record in leaf_page._recovered_records:
+                for record in leaf_page.recovered_records:
                     values_iter = (
                         record.fields[idx].value for idx in record.fields
                     )
@@ -626,7 +659,7 @@ class Page(object):
     def __init__(self, page_idx, db):
         self._page_idx = page_idx
         self._db = db
-        self._bytes = db._page_cache[self.idx]
+        self._bytes = db.page_bytes(self.idx)
 
     @property
     def idx(self):
@@ -703,8 +736,12 @@ class OverflowPage(Page):
     # argument?
     def __init__(self, page_idx, db):
         super().__init__(page_idx, db)
+        self._parse()
+
+    def _parse(self):
         # TODO We should have parsing here for the next page index in the
         # overflow chain
+        pass
 
     def __repr__(self):
         return "<SQLite Overflow Page {0}. Continuation of {1}>".format(
@@ -788,7 +825,14 @@ class BTreePage(Page):
             return self.btree_page_types[self._btree_header.page_type]
         except KeyError:
             pdb.set_trace()
-            pass
+            _LOGGER.warning(
+                "Unknown B-Tree page type: %d", self._btree_header.page_type
+            )
+            raise
+
+    @property
+    def freeblocks(self):
+        return self._freeblocks
 
     @property
     def cells(self):
@@ -802,10 +846,7 @@ class BTreePage(Page):
 
     @property
     def table(self):
-        try:
-            return self._db._page_tables[self.idx]
-        except KeyError:
-            return None
+        return self._db.get_page_table(self.idx)
 
     def _get_btree_page_header(self):
         header_offset = 0
@@ -890,7 +931,7 @@ class BTreePage(Page):
                 )
                 next_oflow_idx = first_oflow_idx
                 while next_oflow_idx != 0:
-                    oflow_page_bytes = self._db._page_cache[next_oflow_idx]
+                    oflow_page_bytes = self._db.page_bytes(next_oflow_idx)
 
                     len_overflow = min(
                         len(oflow_page_bytes) - 4,
@@ -912,14 +953,18 @@ class BTreePage(Page):
                     cell_data += overflow_bytes
 
                 # All payload bytes should be accounted for
-                assert(len(cell_data) == total_payload_size)
+                assert len(cell_data) == total_payload_size
 
                 record_obj = Record(cell_data)
                 _LOGGER.debug("Created record: %r", record_obj)
 
             except TypeError as ex:
+                _LOGGER.warning(
+                    "Caught %r while instantiating record %d",
+                    ex, int(integer_key)
+                )
                 pdb.set_trace()
-                raise ex
+                raise
 
             self._cells[cell_idx] = (int(integer_key), record_obj)
 
@@ -958,7 +1003,7 @@ class BTreePage(Page):
                 "Cell %d, rowid: %d, record: %r",
                 cell_idx, rowid, record
             )
-            record._print_fields(table=self.table)
+            record.print_fields(table=self.table)
 
     def recover_freeblock_records(self):
         # If we're lucky (i.e. if no overwriting has taken place), we should be
@@ -1030,6 +1075,10 @@ class BTreePage(Page):
                 freeblock_offset,
             )
 
+    @property
+    def recovered_records(self):
+        return self._recovered_records
+
     def print_recovered_records(self):
         if not self._recovered_records:
             return
@@ -1037,7 +1086,7 @@ class BTreePage(Page):
         for record_obj in self._recovered_records:
             _LOGGER.info("Recovered record: %r", record_obj)
             _LOGGER.info("Recovered record header: %s", record_obj.header)
-            record_obj._print_fields(table=self.table)
+            record_obj.print_fields(table=self.table)
 
 
 class Record(object):
@@ -1126,8 +1175,12 @@ class Record(object):
             except MalformedField:
                 raise MalformedRecord
             except Exception as ex:
+                _LOGGER.warning(
+                    "Caught %r while instantiating field %d (%d)",
+                    ex, col_idx, serial_type
+                )
                 pdb.set_trace()
-                pass
+                raise
 
             self._fields[col_idx] = field_obj
             col_idx += 1
@@ -1141,7 +1194,7 @@ class Record(object):
 
         # assert(parsed_header_bytes == int(header_length_varint))
 
-    def _print_fields(self, table=None):
+    def print_fields(self, table=None):
         for field_idx in self._fields:
             field_obj = self._fields[field_idx]
             if not table or table.columns is None:
@@ -1149,7 +1202,7 @@ class Record(object):
                     "\tField %d (%d bytes), type %d: %s",
                     field_obj.index,
                     len(field_obj),
-                    field_obj._type,
+                    field_obj.serial_type,
                     field_obj.value
                 )
             else:
@@ -1226,7 +1279,7 @@ class Field(object):
         elif self._type >= 13 and (1 == self._type % 2):
             try:
                 self._value = bytes(self).decode('utf-8')
-            except UnicodeDecodeError as ex:
+            except UnicodeDecodeError:
                 raise MalformedField
 
         elif self._type >= 12 and (0 == self._type % 2):
@@ -1250,6 +1303,10 @@ class Field(object):
     @property
     def value(self):
         return self._value
+
+    @property
+    def serial_type(self):
+        return self._type
 
 
 class Varint(object):
@@ -1313,12 +1370,11 @@ def process_db(db_path, out_dir):
     # from their table's root page
     db.reparent_orphaned_table_leaf_pages()
 
-    assert(len(db._page_types) == db.header.size_in_pages)
     # All pages should now be represented by specialised objects
     assert(all(isinstance(p, Page) for p in db.pages.values()))
     assert(not any(type(p) is Page for p in db.pages.values()))
 
-    for _ in sorted(db._freelist_leaves):
+    for _ in sorted(db.freelist_leaves):
         # TODO Find a way to get records out of these!!
         # print(db._page_cache[freelist_leaf_idx])
         pass
@@ -1334,6 +1390,6 @@ def process_db(db_path, out_dir):
         table.csv_dump(out_dir)
 
 
-if '__main__' == __name__:
+def main():
     # TODO Use argparse!
     process_db(sys.argv[1], sys.argv[2])
