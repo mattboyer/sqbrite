@@ -128,8 +128,8 @@ def heuristic_factory(magic, offset):
 
 def load_heuristics():
 
-    def _load_from_json(file_like):
-        raw_json = json.load(file_like)
+    def _load_from_json(json_bytes):
+        raw_json = json.loads(json_bytes.decode('utf-8'))
         for table_name in raw_json:
             heuristic_params = raw_json[table_name]
             magic = base64.standard_b64decode(
@@ -140,12 +140,12 @@ def load_heuristics():
             )
 
     with pkg_resources.resource_stream(PROJECT_NAME, BUILTIN_JSON) as builtin:
-        _load_from_json(builtin)
+        _load_from_json(builtin.read())
 
     if not os.path.exists(USER_JSON_PATH):
         return
     with open(USER_JSON_PATH, 'r') as user_json:
-        _load_from_json(user_json)
+        _load_from_json(user_json.read())
 
 
 class IndexDict(dict):
