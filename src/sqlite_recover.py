@@ -128,16 +128,17 @@ def heuristic_factory(magic, offset):
 
 def load_heuristics():
 
-    def _load_from_json(json_bytes):
-        raw_json = json.loads(json_bytes.decode('utf-8'))
-        for table_name in raw_json:
-            heuristic_params = raw_json[table_name]
+    def _load_from_json(raw_json):
+        if isinstance(raw_json, bytes):
+            raw_json = raw_json.decode('utf-8')
+        for table_name, heuristic_params in json.loads(raw_json).items():
             magic = base64.standard_b64decode(
                 heuristic_params['magic']
             )
             heuristics[table_name] = heuristic_factory(
                 magic, heuristic_params['offset']
             )
+            _LOGGER.debug("Loaded heuristics for \"%s\"", table_name)
 
     with pkg_resources.resource_stream(PROJECT_NAME, BUILTIN_JSON) as builtin:
         _load_from_json(builtin.read())
