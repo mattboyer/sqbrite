@@ -47,7 +47,7 @@ setup(
     include_package_data=True,
     package_dir={PROJECT_NAME: 'src'},
     install_requires=[
-        'blessings',
+        'pyxdg',
     ],
     entry_points={
         'console_scripts': [
