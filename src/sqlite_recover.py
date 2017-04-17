@@ -7,7 +7,7 @@ import csv
 import logging
 import os
 import os.path
-import pdb
+import ipdb
 import re
 import stat
 import struct
@@ -475,7 +475,7 @@ class SQLite_DB(object):
             try:
                 table_obj = Table(table_name, self, rootpage)
             except Exception as ex:  # pylint:disable=W0703
-                pdb.set_trace()
+                ipdb.set_trace()
                 _LOGGER.warning(
                     "Caught %r while instantiating table object for \"%s\"",
                     ex, table_name
@@ -774,7 +774,7 @@ class BTreePage(Page):
         self._overflow_threshold = self.usable_size - 35
 
         if self._btree_header.page_type not in BTreePage.btree_page_types:
-            pdb.set_trace()
+            ipdb.set_trace()
             raise ValueError
 
         # We have a twelve-byte header, need to read it again
@@ -824,7 +824,7 @@ class BTreePage(Page):
         try:
             return self.btree_page_types[self._btree_header.page_type]
         except KeyError:
-            pdb.set_trace()
+            ipdb.set_trace()
             _LOGGER.warning(
                 "Unknown B-Tree page type: %d", self._btree_header.page_type
             )
@@ -963,7 +963,7 @@ class BTreePage(Page):
                     "Caught %r while instantiating record %d",
                     ex, int(integer_key)
                 )
-                pdb.set_trace()
+                ipdb.set_trace()
                 raise
 
             self._cells[cell_idx] = (int(integer_key), record_obj)
@@ -1179,7 +1179,7 @@ class Record(object):
                     "Caught %r while instantiating field %d (%d)",
                     ex, col_idx, serial_type
                 )
-                pdb.set_trace()
+                ipdb.set_trace()
                 raise
 
             self._fields[col_idx] = field_obj
