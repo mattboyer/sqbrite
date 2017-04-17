@@ -127,7 +127,6 @@ def heuristic_factory(magic, offset):
 
 
 def load_heuristics():
-    pdb.set_trace()
 
     def _load_from_json(file_like):
         raw_json = json.load(file_like)
