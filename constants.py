@@ -8,3 +8,44 @@ SQLITE_TABLE_COLUMNS = {
     'sqlite_stat3': ('tbl', 'idx', 'nEq', 'nLt', 'nDLt', 'sample'),
     'sqlite_stat4': ('tbl', 'idx', 'nEq', 'nLt', 'nDLt', 'sample'),
 }
+
+# These are the integers used in ptrmap entries to designate the kind of page
+# for which a given ptrmap entry holds a notional "child to parent" pointer
+BTREE_ROOT_PAGE = 1
+FREELIST_PAGE = 2
+FIRST_OFLOW_PAGE = 3
+NON_FIRST_OFLOW_PAGE = 4
+BTREE_NONROOT_PAGE = 5
+
+PTRMAP_PAGE_TYPES = (
+    BTREE_ROOT_PAGE,
+    FREELIST_PAGE,
+    FIRST_OFLOW_PAGE,
+    NON_FIRST_OFLOW_PAGE,
+    BTREE_NONROOT_PAGE,
+)
+
+OVERFLOW_PAGE_TYPES = (
+    FIRST_OFLOW_PAGE,
+    NON_FIRST_OFLOW_PAGE,
+)
+
+# These are identifiers used internally to keep track of page types *before*
+# specialised objects can be instantiated
+FREELIST_TRUNK_PAGE = 'freelist_trunk'
+FREELIST_LEAF_PAGE = 'freelist_leaf'
+PTRMAP_PAGE = 'ptrmap_page'
+UNKNOWN_PAGE = 'unknown'
+
+FREELIST_PAGE_TYPES = (
+    FREELIST_TRUNK_PAGE,
+    FREELIST_LEAF_PAGE,
+)
+
+NON_BTREE_PAGE_TYPES = (
+    FREELIST_TRUNK_PAGE,
+    FREELIST_LEAF_PAGE,
+    FIRST_OFLOW_PAGE,
+    NON_FIRST_OFLOW_PAGE,
+    PTRMAP_PAGE,
+)

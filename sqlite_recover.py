@@ -7,6 +7,7 @@ import csv
 import logging
 import os
 import os.path
+import pdb
 import re
 import stat
 import struct
@@ -30,7 +31,7 @@ SQLite_header = collections.namedtuple('SQLite_header', (
     'leaf_payload_fraction',
     'file_change_counter',
     'size_in_pages',
-    'first_freelist_trunk_page',
+    'first_freelist_trunk',
     'freelist_pages',
     'schema_cookie',
     'schema_format',
@@ -46,7 +47,7 @@ SQLite_header = collections.namedtuple('SQLite_header', (
 
 
 SQLite_btree_page_header = collections.namedtuple('SQLite_btree_page_header', (
-    'btree_page_type',
+    'page_type',
     'first_freeblock_offset',
     'num_cells',
     'cell_content_offset',
@@ -103,6 +104,12 @@ heuristics = {
 }
 
 
+class IndexDict(dict):
+    def __iter__(self):
+        for k in sorted(self.keys()):
+            yield k
+
+
 class SQLite_DB(object):
     def __init__(self, path):
         self._path = path
@@ -114,7 +121,7 @@ class SQLite_DB(object):
         self._pages = {}
         self.build_page_cache()
 
-        self._ptrmap = None
+        self._ptrmap = {}
 
         # TODO Do we need all of these?
         self._table_roots = {}
@@ -168,8 +175,10 @@ class SQLite_DB(object):
 
         if file_size < 1073741824:
             _LOGGER.debug("No lock-byte page in this file!")
-        if fields.first_freelist_trunk_page > 0:
-            self._page_types[fields.first_freelist_trunk_page] = 'freelist_trunk'
+
+        if fields.first_freelist_trunk > 0:
+            self._page_types[fields.first_freelist_trunk] = \
+                constants.FREELIST_TRUNK_PAGE
         _LOGGER.debug(fields)
         return fields
 
@@ -190,21 +199,21 @@ class SQLite_DB(object):
             self._pages[page_idx] = Page(page_idx, self)
 
     def populate_freelist_pages(self):
-        if 0 == self._header.first_freelist_trunk_page:
+        if 0 == self._header.first_freelist_trunk:
             _LOGGER.debug("This database has no freelist trunk page")
             return
 
         _LOGGER.info("Parsing freelist pages")
-        parsed_freelist_trunks = 0
-        parsed_freelist_leaves = 0
-        freelist_trunk_page_idx = self._header.first_freelist_trunk_page
+        parsed_trunks = 0
+        parsed_leaves = 0
+        freelist_trunk_idx = self._header.first_freelist_trunk
 
-        while freelist_trunk_page_idx != 0:
+        while freelist_trunk_idx != 0:
             _LOGGER.debug(
                 "Parsing freelist trunk page %d",
-                freelist_trunk_page_idx
+                freelist_trunk_idx
             )
-            trunk_bytes = bytes(self.pages[freelist_trunk_page_idx])
+            trunk_bytes = bytes(self.pages[freelist_trunk_idx])
 
             next_freelist_trunk_page_idx, num_leaf_pages = struct.unpack(
                 r'>II',
@@ -226,32 +235,32 @@ class SQLite_DB(object):
                 # Let's prepare a specialised object for this freelist leaf
                 # page
                 leaf_page = FreelistLeafPage(
-                    page_idx, self, freelist_trunk_page_idx
+                    page_idx, self, freelist_trunk_idx
                 )
                 leaves_in_trunk.append(leaf_page)
                 self._freelist_leaves.append(page_idx)
                 self._pages[page_idx] = leaf_page
 
-                self._page_types[page_idx] = 'freelist_leaf'
+                self._page_types[page_idx] = constants.FREELIST_LEAF_PAGE
 
             trunk_page = FreelistTrunkPage(
-                freelist_trunk_page_idx,
+                freelist_trunk_idx,
                 self,
                 leaves_in_trunk
             )
-            self._pages[freelist_trunk_page_idx] = trunk_page
+            self._pages[freelist_trunk_idx] = trunk_page
             # We've parsed this trunk page
-            parsed_freelist_trunks += 1
+            parsed_trunks += 1
             # ...And every leaf in it
-            parsed_freelist_leaves += num_leaf_pages
+            parsed_leaves += num_leaf_pages
 
-            freelist_trunk_page_idx = next_freelist_trunk_page_idx
+            freelist_trunk_idx = next_freelist_trunk_page_idx
 
-        assert (parsed_freelist_trunks + parsed_freelist_leaves) == self._header.freelist_pages
+        assert (parsed_trunks + parsed_leaves) == self._header.freelist_pages
         _LOGGER.info(
             "Freelist summary: %d trunk pages, %d leaf pages",
-            parsed_freelist_trunks,
-            parsed_freelist_leaves
+            parsed_trunks,
+            parsed_leaves
         )
 
     def populate_overflow_pages(self):
@@ -264,7 +273,7 @@ class SQLite_DB(object):
         overflow_count = 0
         for page_idx in sorted(self._page_types):
             page_type = self._page_types[page_idx]
-            if page_type not in ('non_first_page_in_overflow_chain', 'first_page_in_overflow_chain'):
+            if page_type not in constants.OVERFLOW_PAGE_TYPES:
                 continue
             overflow_page = OverflowPage(page_idx, self)
             self.pages[page_idx] = overflow_page
@@ -277,7 +286,7 @@ class SQLite_DB(object):
             # We don't have ptrmap pages in this DB. That sucks.
             _LOGGER.warning("%r does not have ptrmap pages!", self)
             for page_idx in range(1, self._header.size_in_pages):
-                self._page_types[page_idx] = 'unknown'
+                self._page_types[page_idx] = constants.UNKNOWN_PAGE
             return
 
         _LOGGER.info("Parsing ptrmap pages")
@@ -287,12 +296,11 @@ class SQLite_DB(object):
         num_ptrmap_entries_in_page = usable_size // 5
         ptrmap_page_indices = []
 
-        ptrmap_entries = {}
-        ptrmap_page_idx=2
+        ptrmap_page_idx = 2
         while ptrmap_page_idx <= self._header.size_in_pages:
             page_bytes = self._page_cache[ptrmap_page_idx]
             ptrmap_page_indices.append(ptrmap_page_idx)
-            self._page_types[ptrmap_page_idx] = 'ptrmap_page'
+            self._page_types[ptrmap_page_idx] = constants.PTRMAP_PAGE
             page_ptrmap_entries = {}
 
             ptrmap_bytes = page_bytes[:5 * num_ptrmap_entries_in_page]
@@ -305,26 +313,34 @@ class SQLite_DB(object):
                 if page_type == 0:
                     break
 
-                ptrmap_entry = SQLite_ptrmap_info(ptr_page_idx, page_type, page_ptr)
-                assert(ptrmap_entry.page_type in (1, 2, 3, 4, 5))
-                if page_type == 1:
-                    assert(page_ptr == 0)
-                    self._page_types[ptr_page_idx] = 'btree_root'
-                elif page_type == 2:
-                    assert(self._page_types[ptr_page_idx] in ('freelist_leaf', 'freelist_trunk'))
-                    assert(page_ptr == 0)
-                elif page_type == 3:
-                    assert(page_ptr != 0)
-                    self._page_types[ptr_page_idx] = 'first_page_in_overflow_chain'
-                elif page_type == 4:
-                    assert(page_ptr != 0)
-                    self._page_types[ptr_page_idx] = 'non_first_page_in_overflow_chain'
-                elif page_type == 5:
-                    assert(page_ptr != 0)
-                    self._page_types[ptr_page_idx] = 'btree_non_root'
+                ptrmap_entry = SQLite_ptrmap_info(
+                    ptr_page_idx, page_type, page_ptr
+                )
+                assert ptrmap_entry.page_type in constants.PTRMAP_PAGE_TYPES
+                if page_type == constants.BTREE_ROOT_PAGE:
+                    assert page_ptr == 0
+                    self._page_types[ptr_page_idx] = page_type
+
+                elif page_type == constants.FREELIST_PAGE:
+                    # Freelist pages are assumed to be known already
+                    assert self._page_types[ptr_page_idx] in \
+                        constants.FREELIST_PAGE_TYPES
+                    assert page_ptr == 0
+
+                elif page_type == constants.FIRST_OFLOW_PAGE:
+                    assert page_ptr != 0
+                    self._page_types[ptr_page_idx] = page_type
+
+                elif page_type == constants.NON_FIRST_OFLOW_PAGE:
+                    assert page_ptr != 0
+                    self._page_types[ptr_page_idx] = page_type
+
+                elif page_type == constants.BTREE_NONROOT_PAGE:
+                    assert page_ptr != 0
+                    self._page_types[ptr_page_idx] = page_type
 
                 # _LOGGER.debug("%r", ptrmap_entry)
-                ptrmap_entries[ptr_page_idx] = ptrmap_entry
+                self._ptrmap[ptr_page_idx] = ptrmap_entry
                 page_ptrmap_entries[ptr_page_idx] = ptrmap_entry
 
             page = PtrmapPage(ptrmap_page_idx, self, page_ptrmap_entries)
@@ -332,15 +348,18 @@ class SQLite_DB(object):
             _LOGGER.debug("%r", page)
             ptrmap_page_idx += num_ptrmap_entries_in_page + 1
 
-        assert(all(entry.page_type in (1,2,3,4,5) for entry in ptrmap_entries.values()))
-        self._ptrmap = ptrmap_entries
-        _LOGGER.info("Ptrmap summary: %d pages, %r", len(ptrmap_page_indices), ptrmap_page_indices)
+        _LOGGER.info(
+            "Ptrmap summary: %d pages, %r",
+            len(ptrmap_page_indices), ptrmap_page_indices
+        )
 
     def populate_btree_pages(self):
-        page_idx=1
+        # TODO Should this use table information instead of scanning all pages?
+        page_idx = 1
         while page_idx <= self._header.size_in_pages:
             try:
-                if self._page_types[page_idx] in ('freelist_leaf', 'freelist_trunk', 'ptrmap_page', 'first_page_in_overflow_chain', 'non_first_page_in_overflow_chain'):
+                if self._page_types[page_idx] in \
+                        constants.NON_BTREE_PAGE_TYPES:
                     page_idx += 1
                     continue
             except KeyError:
@@ -351,7 +370,11 @@ class SQLite_DB(object):
             except ValueError:
                 # This page isn't a valid btree page. This can happen if we
                 # don't have a ptrmap to guide us
-                _LOGGER.warning("Page %d (%s) is not a btree page", page_idx, self._page_types[page_idx])
+                _LOGGER.warning(
+                    "Page %d (%s) is not a btree page",
+                    page_idx,
+                    self._page_types[page_idx]
+                )
                 page_idx += 1
                 continue
 
@@ -360,50 +383,73 @@ class SQLite_DB(object):
             self._pages[page_idx] = page_obj
             page_idx += 1
 
+    def _parse_master_leaf_page(self, page):
+        for cell_idx in page.cells:
+            _, master_record = page.cells[cell_idx]
+            assert isinstance(master_record, Record)
+            fields = [
+                master_record.fields[idx].value for idx in master_record.fields
+            ]
+            master_record = SQLite_master_record(*fields)
+            if 'table' != master_record.type:
+                continue
+
+            self._table_roots[master_record.name] = \
+                self.pages[master_record.rootpage]
+
+            # This record describes a table in the schema, which means it
+            # includes a SQL statement that defines the table's columns
+            # We need to parse the field names out of that statement
+            assert master_record.sql.startswith('CREATE TABLE')
+            columns_re = re.compile(r'^CREATE TABLE (\S+) \((.*)\)$')
+            match = columns_re.match(master_record.sql)
+            if match:
+                assert match.group(1) == master_record.name
+                column_list = match.group(2)
+                csl_between_parens_re = re.compile(r'\([^)]+\)')
+                expunged = csl_between_parens_re.sub('', column_list)
+
+                cols = [
+                    statement.strip() for statement in expunged.split(',')
+                ]
+                cols = [
+                    statement for statement in cols if not (
+                        statement.startswith('PRIMARY') or
+                        statement.startswith('UNIQUE')
+                    )
+                ]
+                columns = [col.split()[0] for col in cols]
+                _LOGGER.info(
+                    "Columns for table \"%s\": %r",
+                    master_record.name, columns
+                )
+                self._table_columns[master_record.name] = columns
+
     def map_tables(self):
         first_page = self.pages[1]
-        self._page_tables[1] = 'sqlite_master'
-
-        assert(isinstance(first_page, BTreePage))
+        assert isinstance(first_page, BTreePage)
 
         master_table = Table('sqlite_master', self, first_page)
         self._table_columns.update(constants.SQLITE_TABLE_COLUMNS)
 
         for master_leaf in master_table.leaves:
-            for cell_idx in sorted(master_leaf.cells):
-                _, master_table_record = master_leaf.cells[cell_idx]
-                assert(isinstance(master_table_record, Record))
-                fields = [
-                    master_table_record.fields[idx].value for idx in sorted(master_table_record.fields)
-                ]
-                master_record = SQLite_master_record(*fields)
-                if 'table' == master_record.type:
-                    self._table_roots[master_record.name] = self.pages[master_record.rootpage]
-                    # We need to get the fields out of the SQL
-                    assert(master_record.sql.startswith('CREATE TABLE'))
-                    columns_re = re.compile(r'^CREATE TABLE (\S+) \((.*)\)$')
-                    match = columns_re.match(master_record.sql)
-                    if match:
-                        assert(match.group(1) == master_record.name)
-                        column_list = match.group(2)
-                        csl_between_parens_re = re.compile(r'\([^)]+\)')
-                        expunged = csl_between_parens_re.sub('', column_list)
+            self._parse_master_leaf_page(master_leaf)
 
-                        cols = [statement.strip() for statement in expunged.split(',')]
-                        cols = [statement for statement in cols if not (statement.startswith('PRIMARY') or statement.startswith('UNIQUE'))]
-                        columns = [col.split()[0] for col in cols]
-                        _LOGGER.info("Columns for table \"%s\": %r", master_record.name, columns)
-                        self._table_columns[master_record.name] = columns
+        assert all(
+            isinstance(root, BTreePage) for root in self._table_roots.values()
+        )
+        assert all(
+            root.parent is None for root in self._table_roots.values()
+        )
 
-        assert(all(isinstance(rootpage, BTreePage) for rootpage in self._table_roots.values()))
-        assert(all(rootpage.parent is None for rootpage in self._table_roots.values()))
+        self._page_tables[1] = 'sqlite_master'
         self._table_roots['sqlite_master'] = self.pages[1]
 
         for table_name, rootpage in self._table_roots.items():
             try:
                 table_obj = Table(table_name, self, rootpage)
             except Exception as ex:
-                import pdb; pdb.set_trace()
+                pdb.set_trace()
                 pass
             else:
                 self._tables[table_name] = table_obj
@@ -424,13 +470,19 @@ class SQLite_DB(object):
                     root_table = parent.table
                     parent = parent.parent
 
-                _LOGGER.debug("Reparenting %r to table \"%s\"", page, root_table.name)
+                _LOGGER.debug(
+                    "Reparenting %r to table \"%s\"",
+                    page, root_table.name
+                )
                 root_table._leaves.append(page)
                 self._page_tables[page.idx] = root_table
                 reparented_pages.append(page)
 
         if reparented_pages:
-            _LOGGER.info("Reparented %d pages: %r", len(reparented_pages), [p.idx for p in reparented_pages])
+            _LOGGER.info(
+                "Reparented %d pages: %r",
+                len(reparented_pages), [p.idx for p in reparented_pages]
+            )
 
     def grep(self, needle):
         match_found = False
@@ -441,7 +493,10 @@ class SQLite_DB(object):
             if needle_bytes in page_bytes:
                 match_found = True
                 needle_index = page_bytes.index(needle_bytes)
-                _LOGGER.info("Found search term in page %d @ offset %d", page_idx, needle_index)
+                _LOGGER.info(
+                    "Found search term in page %d @ offset %d",
+                    page_idx, needle_index
+                )
             page_idx += 1
 
 
@@ -470,16 +525,22 @@ class Table(object):
         return self._columns
 
     def __repr__(self):
-        return "<SQLite table \"{}\", root: {}, leaves: {}>".format(self.name, self._root.idx, len(self._leaves))
+        return "<SQLite table \"{}\", root: {}, leaves: {}>".format(
+            self.name, self._root.idx, len(self._leaves)
+        )
 
     def _populate_pages(self):
         _LOGGER.info("Page %d is root for %s", self._root.idx, self.name)
         table_pages = [self._root]
 
         if self._root.btree_header.right_most_page_idx is not None:
-            rightmost_page = self._db.pages[self._root.btree_header.right_most_page_idx]
+            rightmost_idx = self._root.btree_header.right_most_page_idx
+            rightmost_page = self._db.pages[rightmost_idx]
             if rightmost_page is not self._root:
-                _LOGGER.info("Page %d is rightmost for %s", self._root.btree_header.right_most_page_idx, self.name)
+                _LOGGER.info(
+                    "Page %d is rightmost for %s",
+                    rightmost_idx, self.name
+                )
                 table_pages.append(rightmost_page)
 
         page_queue = list(table_pages)
@@ -491,7 +552,7 @@ class Table(object):
                 self._leaves.append(table_page)
                 continue
 
-            for cell_idx in sorted(table_page.cells):
+            for cell_idx in table_page.cells:
                 page_ptr, max_row_in_page = table_page.cells[cell_idx]
 
                 page = self._db.pages[page_ptr]
@@ -518,7 +579,7 @@ class Table(object):
 
             _LOGGER.info("%r", page)
             page.recover_freeblock_records()
-            # page.print_recovered_records()
+            page.print_recovered_records()
 
     def csv_dump(self, out_dir):
         csv_path = os.path.join(out_dir, self.name + '.csv')
@@ -531,20 +592,30 @@ class Table(object):
             writer.writeheader()
 
             for leaf_page in self.leaves:
-                for cell_idx in sorted(leaf_page.cells):
-                    rowid, record_obj = leaf_page.cells[cell_idx]
-                    _LOGGER.debug('%r', record_obj.header)
-                    fields_iter = (repr(record_obj.fields[field_idx]) for field_idx in sorted(record_obj.fields))
-                    _LOGGER.debug(','.join(fields_iter))
-                    values_iter = (record_obj.fields[field_idx].value for field_idx in sorted(record_obj.fields))
+                for cell_idx in leaf_page.cells:
+                    rowid, record = leaf_page.cells[cell_idx]
+                    _LOGGER.debug('Record %d: %r', rowid, record.header)
+                    fields_iter = (
+                        repr(record.fields[idx]) for idx in record.fields
+                    )
+                    _LOGGER.debug(', '.join(fields_iter))
+
+                    values_iter = (
+                        record.fields[idx].value for idx in record.fields
+                    )
                     writer.writerow(dict(zip(self._columns, values_iter)))
 
                 if not leaf_page._recovered_records:
                     continue
 
-                for record_obj in leaf_page._recovered_records:
-                    values_iter = (record_obj.fields[field_idx].value for field_idx in sorted(record_obj.fields))
+                # Recovered records are in an unordered set because their rowid
+                # has been lost, making sorting impossible
+                for record in leaf_page._recovered_records:
+                    values_iter = (
+                        record.fields[idx].value for idx in record.fields
+                    )
                     writer.writerow(dict(zip(self._columns, values_iter)))
+
             if csv_temp.tell() > 0:
                 csv_temp.seek(0)
                 with open(csv_path, 'w') as csv_file:
@@ -572,7 +643,7 @@ class Page(object):
     def parent(self):
         try:
             parent_idx = self._db.ptrmap[self.idx].page_ptr
-        except TypeError:
+        except KeyError:
             return None
 
         if 0 == parent_idx:
@@ -585,27 +656,34 @@ class Page(object):
 
 
 class FreelistTrunkPage(Page):
-    # XXX Maybe it would make sense to expect a Page instance as constructor argument?
+    # XXX Maybe it would make sense to expect a Page instance as constructor
+    # argument?
     def __init__(self, page_idx, db, leaves):
         super().__init__(page_idx, db)
         self._leaves = leaves
 
     def __repr__(self):
-        return "<SQLite Freelist Trunk Page {0}: {1} leaves>".format(self.idx, len(self._leaves))
+        return "<SQLite Freelist Trunk Page {0}: {1} leaves>".format(
+            self.idx, len(self._leaves)
+        )
 
 
 class FreelistLeafPage(Page):
-    # XXX Maybe it would make sense to expect a Page instance as constructor argument?
+    # XXX Maybe it would make sense to expect a Page instance as constructor
+    # argument?
     def __init__(self, page_idx, db, trunk_idx):
         super().__init__(page_idx, db)
         self._trunk = self._db.pages[trunk_idx]
 
     def __repr__(self):
-        return "<SQLite Freelist Leaf Page {0}. Trunk: {1}>".format(self.idx, self._trunk.idx)
+        return "<SQLite Freelist Leaf Page {0}. Trunk: {1}>".format(
+            self.idx, self._trunk.idx
+        )
 
 
 class PtrmapPage(Page):
-    # XXX Maybe it would make sense to expect a Page instance as constructor argument?
+    # XXX Maybe it would make sense to expect a Page instance as constructor
+    # argument?
     def __init__(self, page_idx, db, ptr_array):
         super().__init__(page_idx, db)
         self._pointers = ptr_array
@@ -615,17 +693,23 @@ class PtrmapPage(Page):
         return self._pointers
 
     def __repr__(self):
-        return "<SQLite Ptrmap Page {0}. {1} pointers>".format(self.idx, len(self.pointers))
+        return "<SQLite Ptrmap Page {0}. {1} pointers>".format(
+            self.idx, len(self.pointers)
+        )
 
 
 class OverflowPage(Page):
-    # XXX Maybe it would make sense to expect a Page instance as constructor argument?
+    # XXX Maybe it would make sense to expect a Page instance as constructor
+    # argument?
     def __init__(self, page_idx, db):
         super().__init__(page_idx, db)
-        # Also, we should have parsing here for the next page index in the overflow chain
+        # TODO We should have parsing here for the next page index in the
+        # overflow chain
 
     def __repr__(self):
-        return "<SQLite Overflow Page {0}. Continuation of {1}>".format(self.idx, self.parent.idx)
+        return "<SQLite Overflow Page {0}. Continuation of {1}>".format(
+            self.idx, self.parent.idx
+        )
 
 
 class BTreePage(Page):
@@ -636,66 +720,85 @@ class BTreePage(Page):
         0x0D:   "Table Leaf",
     }
 
-
     def __init__(self, page_idx, db):
-        # XXX We don't know a page's type until we've had a look at the header. Or do we?
+        # XXX We don't know a page's type until we've had a look at the header.
+        # Or do we?
         super().__init__(page_idx, db)
         self._header_size = 8
         page_header_bytes = self._get_btree_page_header()
-        self._btree_page_header = SQLite_btree_page_header(*struct.unpack(r'>BHHHB', page_header_bytes), None)
+        self._btree_header = SQLite_btree_page_header(
+            # Set the right-most page index to None in the 1st pass
+            *struct.unpack(r'>BHHHB', page_header_bytes), None
+        )
         self._cell_ptr_array = []
-        self._freeblocks = {}
-        self._cells = {}
+        self._freeblocks = IndexDict()
+        self._cells = IndexDict()
         self._recovered_records = set()
         self._overflow_threshold = self.usable_size - 35
 
-        if self._btree_page_header.btree_page_type not in BTreePage.btree_page_types:
-            import pdb; pdb.set_trace()
+        if self._btree_header.page_type not in BTreePage.btree_page_types:
+            pdb.set_trace()
             raise ValueError
 
         # We have a twelve-byte header, need to read it again
-        if self._btree_page_header.btree_page_type in (0x02, 0x05):
+        if self._btree_header.page_type in (0x02, 0x05):
             self._header_size = 12
             page_header_bytes = self._get_btree_page_header()
-            self._btree_page_header = SQLite_btree_page_header(*struct.unpack(r'>BHHHBI', page_header_bytes))
+            self._btree_header = SQLite_btree_page_header(*struct.unpack(
+                r'>BHHHBI', page_header_bytes
+            ))
 
         # Page 1 (and page 2, but that's the 1st ptrmap page) does not have a
         # ptrmap entry.
         # The first ptrmap page will contain back pointer information for pages
         # 3 through J+2, inclusive.
-        if self._db.ptrmap and (self.idx >=3 and self.idx not in self._db.ptrmap):
-            _LOGGER.warning("BTree page %d doesn't have ptrmap entry!", self.idx)
+        if self._db.ptrmap:
+            if self.idx >= 3 and self.idx not in self._db.ptrmap:
+                _LOGGER.warning(
+                    "BTree page %d doesn't have ptrmap entry!", self.idx
+                )
 
-        if self._btree_page_header.num_cells > 0:
-            cell_ptr_bytes = self._get_btree_ptr_array(self._btree_page_header.num_cells)
-            self._cell_ptr_array = struct.unpack(r'>{count}H'.format(count=self._btree_page_header.num_cells), cell_ptr_bytes)
+        if self._btree_header.num_cells > 0:
+            cell_ptr_bytes = self._get_btree_ptr_array(
+                self._btree_header.num_cells
+            )
+            self._cell_ptr_array = struct.unpack(
+                r'>{count}H'.format(count=self._btree_header.num_cells),
+                cell_ptr_bytes
+            )
             smallest_cell_offset = min(self._cell_ptr_array)
-            if self._btree_page_header.cell_content_offset != smallest_cell_offset:
-                _LOGGER.warning("Inconsistent cell ptr array in page %d! Cell content starts at offset %d, but min cell pointer is %d", self.idx, self._btree_page_header.cell_content_offset, smallest_cell_offset)
+            if self._btree_header.cell_content_offset != smallest_cell_offset:
+                _LOGGER.warning(
+                    (
+                        "Inconsistent cell ptr array in page %d! Cell content "
+                        "starts at offset %d, but min cell pointer is %d"
+                    ),
+                    self.idx,
+                    self._btree_header.cell_content_offset,
+                    smallest_cell_offset
+                )
 
     @property
     def btree_header(self):
-        return self._btree_page_header
+        return self._btree_header
 
     @property
     def page_type(self):
         try:
-            return self.btree_page_types[self._btree_page_header.btree_page_type]
+            return self.btree_page_types[self._btree_header.page_type]
         except KeyError:
-            import pdb; pdb.set_trace()
+            pdb.set_trace()
             pass
 
     @property
     def cells(self):
         return self._cells
 
-
     def __repr__(self):
-        # TODO Make table mapping more robust!
-        # table, linked = self.table()
-        # return "<SQLite Page {0}: B-Tree {1} \"{2}\" {3} cells>".format(self.idx, self.page_type, table, len(self._cell_ptr_array))
-        # return "<SQLite Page {0}: B-Tree {1} \"table\" {2} cells>".format(self.idx, self.page_type, len(self._cell_ptr_array))
-        return "<SQLite B-Tree Page {0} ({1}) {2} cells>".format(self.idx, self.page_type, len(self._cell_ptr_array))
+        # TODO Include table in repr, where available
+        return "<SQLite B-Tree Page {0} ({1}) {2} cells>".format(
+            self.idx, self.page_type, len(self._cell_ptr_array)
+        )
 
     @property
     def table(self):
@@ -705,10 +808,10 @@ class BTreePage(Page):
             return None
 
     def _get_btree_page_header(self):
-        page_header_offset = 0
+        header_offset = 0
         if self.idx == 1:
-            page_header_offset += 100
-        return bytes(self)[page_header_offset:self._header_size + page_header_offset]
+            header_offset += 100
+        return bytes(self)[header_offset:self._header_size + header_offset]
 
     def _get_btree_ptr_array(self, num_cells):
         array_offset = self._header_size
@@ -717,14 +820,14 @@ class BTreePage(Page):
         return bytes(self)[array_offset:2 * num_cells + array_offset]
 
     def parse_cells(self):
-        if self.btree_header.btree_page_type == 0x05:
+        if self.btree_header.page_type == 0x05:
             self.parse_table_interior_cells()
-        elif self.btree_header.btree_page_type == 0x0D:
+        elif self.btree_header.page_type == 0x0D:
             self.parse_table_leaf_cells()
         self.parse_freeblocks()
 
     def parse_table_interior_cells(self):
-        if self.btree_header.btree_page_type != 0x05:
+        if self.btree_header.page_type != 0x05:
             assert False
 
         _LOGGER.debug("Parsing cells in table interior cell %d", self.idx)
@@ -738,7 +841,7 @@ class BTreePage(Page):
             self._cells[cell_idx] = (left_ptr, int(integer_key))
 
     def parse_table_leaf_cells(self):
-        if self.btree_header.btree_page_type != 0x0d:
+        if self.btree_header.page_type != 0x0d:
             assert False
 
         _LOGGER.debug("Parsing cells in table leaf cell %d", self.idx)
@@ -757,17 +860,17 @@ class BTreePage(Page):
             # greater than X then the number of bytes stored on the table
             # b-tree leaf page is K if K is less or equal to X or M otherwise.
             # The number of bytes stored on the leaf page is never less than M.
-            payload_size_first_cell = 0
+            cell_payload_size = 0
             if total_payload_size > self._overflow_threshold:
                 m = int(((self.usable_size - 12) * 32/255)-23)
                 k = m + ((total_payload_size - m) % (self.usable_size - 4))
                 if k <= self._overflow_threshold:
-                    payload_size_first_cell = k
+                    cell_payload_size = k
                 else:
-                    payload_size_first_cell = m
+                    cell_payload_size = m
                 overflow = True
             else:
-                payload_size_first_cell = total_payload_size
+                cell_payload_size = total_payload_size
 
             offset += len(payload_length_varint)
 
@@ -776,23 +879,35 @@ class BTreePage(Page):
 
             overflow_bytes = bytes()
             if overflow:
-                first_overflow_page_bytes = bytes(self)[offset + payload_size_first_cell:offset + payload_size_first_cell + 4]
-                if not first_overflow_page_bytes:
+                first_oflow_page_bytes = bytes(self)[
+                    offset + cell_payload_size:offset + cell_payload_size + 4
+                ]
+                if not first_oflow_page_bytes:
                     continue
-                first_overflow_page_idx = struct.unpack(r'>I', first_overflow_page_bytes)[0]
-                
-                next_overflow_page_idx = first_overflow_page_idx
-                while next_overflow_page_idx != 0:
-                    overflow_page_bytes = self._db._page_cache[next_overflow_page_idx]
 
-                    len_overflow = min(len(overflow_page_bytes) - 4, total_payload_size - (payload_size_first_cell + len(overflow_bytes)))
-                    overflow_bytes += overflow_page_bytes[4:4 + len_overflow]
+                first_oflow_idx, = struct.unpack(
+                    r'>I', first_oflow_page_bytes
+                )
+                next_oflow_idx = first_oflow_idx
+                while next_oflow_idx != 0:
+                    oflow_page_bytes = self._db._page_cache[next_oflow_idx]
 
-                    first_four_bytes = overflow_page_bytes[:4]
-                    next_overflow_page_idx = struct.unpack(r'>I', first_four_bytes)[0]
+                    len_overflow = min(
+                        len(oflow_page_bytes) - 4,
+                        (
+                            total_payload_size - cell_payload_size +
+                            len(overflow_bytes)
+                        )
+                    )
+                    overflow_bytes += oflow_page_bytes[4:4 + len_overflow]
+
+                    first_four_bytes = oflow_page_bytes[:4]
+                    next_oflow_idx, = struct.unpack(
+                        r'>I', first_four_bytes
+                    )
 
             try:
-                cell_data = bytes(self)[offset:offset + payload_size_first_cell]
+                cell_data = bytes(self)[offset:offset + cell_payload_size]
                 if overflow_bytes:
                     cell_data += overflow_bytes
 
@@ -803,11 +918,10 @@ class BTreePage(Page):
                 _LOGGER.debug("Created record: %r", record_obj)
 
             except TypeError as ex:
-                import pdb; pdb.set_trace()
+                pdb.set_trace()
                 raise ex
 
             self._cells[cell_idx] = (int(integer_key), record_obj)
-
 
     def parse_freeblocks(self):
         # The first 2 bytes of a freeblock are a big-endian integer which is
@@ -821,19 +935,29 @@ class BTreePage(Page):
         # page, there will always be at least one cell before the first
         # freeblock.
         #
-        # TODO But what about deleted records that exceeded the overflow threshold in the past?
-        freeblock_offset = self.btree_header.first_freeblock_offset
-        while freeblock_offset != 0:
-            freeblock_bytes = bytes(self)[freeblock_offset:freeblock_offset + 4]
+        # TODO But what about deleted records that exceeded the overflow
+        # threshold in the past?
+        block_offset = self.btree_header.first_freeblock_offset
+        while block_offset != 0:
+            freeblock_header = bytes(self)[block_offset:block_offset + 4]
             # Freeblock_size includes the 4-byte header
-            next_freeblock_offset, freeblock_size = struct.unpack(r'>HH', freeblock_bytes)
-            self._freeblocks[freeblock_offset] = bytes(self)[freeblock_offset + 4:freeblock_offset + freeblock_size - 4]
-            freeblock_offset = next_freeblock_offset
+            next_freeblock_offset, freeblock_size = struct.unpack(
+                r'>HH',
+                freeblock_header
+            )
+            freeblock_bytes = bytes(self)[
+                block_offset + 4:block_offset + freeblock_size - 4
+            ]
+            self._freeblocks[block_offset] = freeblock_bytes
+            block_offset = next_freeblock_offset
 
     def print_cells(self):
-        for cell_idx in sorted(self.cells.keys()):
+        for cell_idx in self.cells.keys():
             rowid, record = self.cells[cell_idx]
-            _LOGGER.info("Cell %d, rowid: %d, record: %r", cell_idx, rowid, record)
+            _LOGGER.info(
+                "Cell %d, rowid: %d, record: %r",
+                cell_idx, rowid, record
+            )
             record._print_fields(table=self.table)
 
     def recover_freeblock_records(self):
@@ -847,7 +971,7 @@ class BTreePage(Page):
             return
 
         _LOGGER.info("Attempting to recover records from freeblocks")
-        for freeblock_idx, freeblock_offset in enumerate(sorted(self._freeblocks.keys())):
+        for freeblock_idx, freeblock_offset in enumerate(self._freeblocks):
             freeblock_bytes = self._freeblocks[freeblock_offset]
             if 0 == len(freeblock_bytes):
                 continue
@@ -862,32 +986,49 @@ class BTreePage(Page):
             recovered_bytes = 0
             recovered_in_freeblock = 0
 
-            # TODO Maybe we need to guess the record header lengths rather than try and read them from the freeblocks
+            # TODO Maybe we need to guess the record header lengths rather than
+            # try and read them from the freeblocks
             for header_start in heuristics[table.name](freeblock_bytes):
-                _LOGGER.debug("Trying potential record header start at freeblock offset %d/%d", header_start, len(freeblock_bytes))
+                _LOGGER.debug(
+                    (
+                        "Trying potential record header start at "
+                        "freeblock offset %d/%d"
+                    ),
+                    header_start, len(freeblock_bytes)
+                )
                 _LOGGER.debug("%r", freeblock_bytes)
                 try:
                     # We don't know how to handle overflow in deleted records,
-                    # so have to truncate the bytes object used to instantiate
-                    # the Record
-                    freeblock_record_obj = Record(freeblock_bytes[header_start:header_start+self._overflow_threshold])
+                    # so we'll have to truncate the bytes object used to
+                    # instantiate the Record object
+                    record_bytes = freeblock_bytes[
+                        header_start:header_start+self._overflow_threshold
+                    ]
+                    record_obj = Record(record_bytes)
                 except MalformedRecord:
-                    # This isn't a well-formed record, let's move to the next candidate
+                    # This isn't a well-formed record, let's move to the next
+                    # candidate
                     continue
 
-                field_lengths = sum(len(field_obj) for field_obj in freeblock_record_obj.fields.values())
-                freeblock_record_obj.truncate(field_lengths + len(freeblock_record_obj.header))
-                self._recovered_records.add(freeblock_record_obj)
-                recovered_bytes += len(bytes(freeblock_record_obj))
+                field_lengths = sum(
+                    len(field_obj) for field_obj in record_obj.fields.values()
+                )
+                record_obj.truncate(field_lengths + len(record_obj.header))
+                self._recovered_records.add(record_obj)
+
+                recovered_bytes += len(bytes(record_obj))
                 recovered_in_freeblock += 1
 
-            _LOGGER.info("Recovered %d record(s): %d bytes out of %d freeblock bytes @ offset %d",
+            _LOGGER.info(
+                (
+                    "Recovered %d record(s): %d bytes out of %d "
+                    "freeblock bytes @ offset %d"
+                ),
                 recovered_in_freeblock,
                 recovered_bytes,
                 len(freeblock_bytes),
                 freeblock_offset,
             )
-
 
     def print_recovered_records(self):
         if not self._recovered_records:
@@ -917,7 +1058,7 @@ class Record(object):
     def __init__(self, record_bytes):
         self._bytes = record_bytes
         self._header_bytes = None
-        self._fields = {}
+        self._fields = IndexDict()
         self._parse()
 
     def __bytes__(self):
@@ -938,14 +1079,19 @@ class Record(object):
     def _parse(self):
         header_offset = 0
 
-        header_length_varint = Varint(bytes(self)[header_offset:9 + header_offset])
+        header_length_varint = Varint(
+            # A varint is encoded on *at most* 9 bytes
+            bytes(self)[header_offset:9 + header_offset]
+        )
 
         # Let's keep track of how many bytes of the Record header (including
         # the header length itself) we've succesfully parsed
         parsed_header_bytes = len(header_length_varint)
 
         if len(bytes(self)) < int(header_length_varint):
-            raise MalformedRecord("Not enough bytes to fully read the record header!")
+            raise MalformedRecord(
+                "Not enough bytes to fully read the record header!"
+            )
 
         header_offset += len(header_length_varint)
         self._header_bytes = bytes(self)[:int(header_length_varint)]
@@ -953,34 +1099,42 @@ class Record(object):
         col_idx = 0
         field_offset = int(header_length_varint)
         while header_offset < int(header_length_varint):
-            col_type_varint = Varint(bytes(self)[header_offset:9 + header_offset])
+            serial_type_varint = Varint(
+                bytes(self)[header_offset:9 + header_offset]
+            )
+            serial_type = int(serial_type_varint)
             col_length = None
 
             try:
-                col_length, _ = self.column_types[int(col_type_varint)]
+                col_length, _ = self.column_types[serial_type]
             except KeyError:
-                if int(col_type_varint) >= 13 and (1 == int(col_type_varint) % 2):
-                    col_length = (int(col_type_varint) - 13) // 2
-                elif int(col_type_varint) >= 12 and (0 == int(col_type_varint) % 2):
-                    col_length = (int(col_type_varint) - 12) // 2
+                if serial_type >= 13 and (1 == serial_type % 2):
+                    col_length = (serial_type - 13) // 2
+                elif serial_type >= 12 and (0 == serial_type % 2):
+                    col_length = (serial_type - 12) // 2
                 else:
-                    raise ValueError("Unknown type {}".format(int(col_type_varint)))
+                    raise ValueError(
+                        "Unknown serial type {}".format(serial_type)
+                    )
 
             try:
-                field_obj = Field(col_idx, int(col_type_varint), bytes(self)[field_offset:field_offset + col_length])
+                field_obj = Field(
+                    col_idx,
+                    serial_type,
+                    bytes(self)[field_offset:field_offset + col_length]
+                )
             except MalformedField:
                 raise MalformedRecord
             except Exception as ex:
-                import pdb; pdb.set_trace()
+                pdb.set_trace()
                 pass
-
 
             self._fields[col_idx] = field_obj
             col_idx += 1
             field_offset += col_length
 
-            parsed_header_bytes += len(col_type_varint)
-            header_offset += len(col_type_varint)
+            parsed_header_bytes += len(serial_type_varint)
+            header_offset += len(serial_type_varint)
 
             if field_offset > len(bytes(self)):
                 raise MalformedRecord
@@ -988,22 +1142,36 @@ class Record(object):
         # assert(parsed_header_bytes == int(header_length_varint))
 
     def _print_fields(self, table=None):
-        for field_idx in sorted(self._fields):
+        for field_idx in self._fields:
             field_obj = self._fields[field_idx]
             if not table or table.columns is None:
-                _LOGGER.info("\tField %d (%d bytes), type %d: %s", field_obj.index, len(field_obj), field_obj._type, field_obj.value)
+                _LOGGER.info(
+                    "\tField %d (%d bytes), type %d: %s",
+                    field_obj.index,
+                    len(field_obj),
+                    field_obj._type,
+                    field_obj.value
+                )
             else:
-                _LOGGER.info("\t%s: %s", table.columns[field_obj.index], field_obj.value)
+                _LOGGER.info(
+                    "\t%s: %s",
+                    table.columns[field_obj.index],
+                    field_obj.value
+                )
 
     def __repr__(self):
-        return '<Record {} fields, {} bytes, header: {} bytes>'.format(len(self._fields), len(bytes(self)), len(self.header))
+        return '<Record {} fields, {} bytes, header: {} bytes>'.format(
+            len(self._fields), len(bytes(self)), len(self.header)
+        )
 
 
 class MalformedField(Exception):
     pass
 
+
 class MalformedRecord(Exception):
     pass
+
 
 class Field(object):
     def __init__(self, idx, serial_type, serial_bytes):
@@ -1068,7 +1236,9 @@ class Field(object):
         return self._bytes
 
     def __repr__(self):
-        return "<Field {}: {} ({} bytes)>".format(self._index, self._value, len(bytes(self)))
+        return "<Field {}: {} ({} bytes)>".format(
+            self._index, self._value, len(bytes(self))
+        )
 
     def __len__(self):
         return len(bytes(self))
@@ -1099,9 +1269,11 @@ class Varint(object):
 
         varint_twos_complement = 0
         for position, b in enumerate(varint_bits[::-1]):
-            varint_twos_complement += b * (1<<(7*position))
+            varint_twos_complement += b * (1 << (7*position))
 
-        self._value = decode_twos_complement(int.to_bytes(varint_twos_complement, 4, byteorder='big'), 64)
+        self._value = decode_twos_complement(
+            int.to_bytes(varint_twos_complement, 4, byteorder='big'), 64
+        )
 
     def __int__(self):
         return self._value
