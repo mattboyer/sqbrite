@@ -561,17 +561,23 @@ class SQLite_DB(object):
     def grep(self, needle):
         match_found = False
         page_idx = 1
-        while not (match_found or page_idx > self.header.size_in_pages):
-            page_bytes = self._page_cache[page_idx]
-            needle_bytes = needle.encode('utf-8')
-            if needle_bytes in page_bytes:
-                match_found = True
-                needle_index = page_bytes.index(needle_bytes)
+        needle_re = re.compile(needle.encode('utf-8'))
+        while (page_idx <= self.header.size_in_pages):
+            page = self.pages[page_idx]
+            page_offsets = []
+            for match in needle_re.finditer(bytes(page)):
+                needle_offset = match.start()
+                page_offsets.append(needle_offset)
+            if page_offsets:
                 _LOGGER.info(
-                    "Found search term in page %d @ offset %d",
-                    page_idx, needle_index
+                    "Found search term in page %r @ offset(s) %s",
+                    page, ', '.join(str(offset) for offset in page_offsets)
                 )
             page_idx += 1
+        if not match_found:
+            _LOGGER.warning(
+                "Search term not found",
+            )
 
 
 class Table(object):
@@ -1414,12 +1420,12 @@ def gen_output_dir(db_path):
     )
 
 
-def process_db(db_path, out_dir):
-    out_dir = out_dir or gen_output_dir(db_path)
+def _load_db(sqlite_path):
+    _LOGGER.info("Processing %s", sqlite_path)
 
-    _LOGGER.info("Processing %s", db_path)
+    load_heuristics()
 
-    db = SQLite_DB(db_path)
+    db = SQLite_DB(sqlite_path)
     _LOGGER.info("Database: %r", db)
 
     db.populate_freelist_pages()
@@ -1439,11 +1445,12 @@ def process_db(db_path, out_dir):
     # All pages should now be represented by specialised objects
     assert(all(isinstance(p, Page) for p in db.pages.values()))
     assert(not any(type(p) is Page for p in db.pages.values()))
+    return db
 
-    for _ in sorted(db.freelist_leaves):
-        # TODO Find a way to get records out of these!!
-        # print(db._page_cache[freelist_leaf_idx])
-        pass
+
+def dump_to_csv(args):
+    out_dir = args.output_dir or gen_output_dir(args.sqlite_path)
+    db = _load_db(args.sqlite_path)
 
     if os.path.exists(out_dir):
         raise ValueError("Output directory {} exists!".format(out_dir))
@@ -1456,26 +1463,83 @@ def process_db(db_path, out_dir):
         table.csv_dump(out_dir)
 
 
+def find_in_db(args):
+    db = _load_db(args.sqlite_path)
+    db.grep(args.needle)
+
+
+subcmd_actions = {
+    'csv':  dump_to_csv,
+    'grep': find_in_db,
+}
+
+
+def subcmd_dispatcher(arg_ns):
+    return subcmd_actions[arg_ns.subcmd](arg_ns)
+
+
 def main():
-    parser = argparse.ArgumentParser(description=PROJECT_DESCRIPTION)
-    parser.add_argument(
+
+    verbose_parser = argparse.ArgumentParser(add_help=False)
+    verbose_parser.add_argument(
+        '-v', '--verbose',
+        action='count',
+        help='Give *A LOT* more output.',
+    )
+
+    cli_parser = argparse.ArgumentParser(
+        description=PROJECT_DESCRIPTION,
+        parents=[verbose_parser],
+    )
+
+    subcmd_parsers = cli_parser.add_subparsers(
+        title='Subcommands',
+        description='%(prog)s implements the following subcommands:',
+        dest='subcmd',
+    )
+
+    csv_parser = subcmd_parsers.add_parser(
+        'csv',
+        parents=[verbose_parser],
+        help='Dumps visible and recovered records to CSV files',
+        description=(
+            'Recovers as many records as possible from the database passed as '
+            'argument and outputs all visible and recovered records to CSV '
+            'files in output_dir'
+        ),
+    )
+    csv_parser.add_argument(
         'sqlite_path',
         help='sqlite3 file path'
     )
-    parser.add_argument(
+    csv_parser.add_argument(
         'output_dir',
         nargs='?',
         default=None,
         help='Output directory'
     )
-    parser.add_argument(
-        '-v', '--verbose',
-        action='count',
-        help='Give *A LOT* more output.'
+
+    grep_parser = subcmd_parsers.add_parser(
+        'grep',
+        parents=[verbose_parser],
+        help='Matches a string in one or more pages of the database',
+        description='Bar',
     )
-    args = parser.parse_args()
-    if args.verbose:
+    grep_parser.add_argument(
+        'sqlite_path',
+        help='sqlite3 file path'
+    )
+    grep_parser.add_argument(
+        'needle',
+        help='String to match in the database'
+    )
+
+    cli_args = cli_parser.parse_args()
+    if cli_args.verbose:
         _LOGGER.setLevel(logging.DEBUG)
 
-    load_heuristics()
-    process_db(args.sqlite_path, args.output_dir)
+    if cli_args.subcmd:
+        subcmd_dispatcher(cli_args)
+    else:
+        # No subcommand specified, print the usage and bail
+        cli_parser.print_help()
