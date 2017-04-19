@@ -32,11 +32,13 @@ import logging
 import os
 import os.path
 import pdb
+import pkg_resources
 import re
+import shutil
+import sqlite3
 import stat
 import struct
 import tempfile
-import pkg_resources
 
 
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s')
@@ -1463,6 +1465,42 @@ def dump_to_csv(args):
         table.csv_dump(out_dir)
 
 
+def undelete(args):
+    db_abspath = os.path.abspath(args.sqlite_path)
+    db = _load_db(db_abspath)
+
+    output_path = os.path.abspath(args.output_path)
+    if os.path.exists(output_path):
+        raise ValueError("Output file {} exists!".format(output_path))
+
+    shutil.copyfile(db_abspath, output_path)
+    with sqlite3.connect(output_path) as output_db_connection:
+        cursor = output_db_connection.cursor()
+        for table_name in sorted(db.tables):
+            table = db.tables[table_name]
+            _LOGGER.info("Table \"%s\"", table)
+            table.recover_records()
+
+            for leaf_page in table.leaves:
+                if not leaf_page.recovered_records:
+                    continue
+
+                for record in leaf_page.recovered_records:
+                    values_iter = (
+                        record.fields[idx].value if record.fields[idx].value != 'NULL' else None for idx in record.fields
+                    )
+                    column_placeholders = (
+                        ':' + col_name for col_name in table._columns
+                    )
+                    pdb.set_trace()
+                    insert_statement = 'INSERT INTO {table} VALUES ({values})'.format(
+                        table=table_name,
+                        values=', '.join(c for c in column_placeholders),
+                    )
+                    cursor.execute(insert_statement, dict(zip(table._columns, values_iter)))
+
+
+
 def find_in_db(args):
     db = _load_db(args.sqlite_path)
     db.grep(args.needle)
@@ -1471,6 +1509,7 @@ def find_in_db(args):
 subcmd_actions = {
     'csv':  dump_to_csv,
     'grep': find_in_db,
+    'undelete': undelete,
 }
 
 
@@ -1532,6 +1571,24 @@ def main():
     grep_parser.add_argument(
         'needle',
         help='String to match in the database'
+    )
+
+    undelete_parser = subcmd_parsers.add_parser(
+        'undelete',
+        parents=[verbose_parser],
+        help='Inserts recovered records into a copy of the database',
+        description=(
+            'Recovers as many records as possible from the database passed as '
+            'argument and inserts all recovered records into a copy of'
+        ),
+    )
+    undelete_parser.add_argument(
+        'sqlite_path',
+        help='sqlite3 file path'
+    )
+    undelete_parser.add_argument(
+        'output_path',
+        help='Output database path'
     )
 
     cli_args = cli_parser.parse_args()
