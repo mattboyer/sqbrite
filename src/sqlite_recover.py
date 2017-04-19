@@ -1497,7 +1497,11 @@ def undelete(args):
                         table=table_name,
                         values=', '.join(c for c in column_placeholders),
                     )
-                    cursor.execute(insert_statement, dict(zip(table._columns, values_iter)))
+                    try:
+                        cursor.execute(insert_statement, dict(zip(table._columns, values_iter)))
+                    except sqlite3.IntegrityError:
+                        # We gotta soldier on
+                        pass
 
 
 
