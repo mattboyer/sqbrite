@@ -1490,7 +1490,7 @@ def undelete(args):
                         record.fields[idx].value if record.fields[idx].value != 'NULL' else None for idx in record.fields
                     )
                     column_placeholders = (
-                        ':' + col_name for col_name in table._columns
+                        ':' + col_name for col_idx, col_name in enumerate(table._columns) if col_idx < len(record.fields)
                     )
                     pdb.set_trace()
                     insert_statement = 'INSERT INTO {table} VALUES ({values})'.format(
@@ -1502,6 +1502,10 @@ def undelete(args):
                     except sqlite3.IntegrityError:
                         # We gotta soldier on
                         pass
+                    except sqlite3.ProgrammingError:
+                        pdb.set_trace()
+                        pass
+
 
 
 
