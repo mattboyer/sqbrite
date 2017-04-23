@@ -32,11 +32,13 @@ import logging
 import os
 import os.path
 import pdb
+import pkg_resources
 import re
+import shutil
+import sqlite3
 import stat
 import struct
 import tempfile
-import pkg_resources
 
 
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s')
@@ -705,6 +707,26 @@ class Table(object):
                 with open(csv_path, 'w') as csv_file:
                     csv_file.write(csv_temp.read())
 
+    def build_insert_SQL(self, record):
+        column_placeholders = (
+            ':' + col_name for col_name in self._columns
+        )
+        insert_statement = 'INSERT INTO {} VALUES ({})'.format(
+            self.name,
+            ', '.join(c for c in column_placeholders),
+        )
+        value_kwargs = {}
+        for col_idx, col_name in enumerate(self._columns):
+            try:
+                if record.fields[col_idx].value == 'NULL':
+                    value_kwargs[col_name] = None
+                else:
+                    value_kwargs[col_name] = record.fields[col_idx].value
+            except KeyError:
+                value_kwargs[col_name] = None
+
+        return insert_statement, value_kwargs
+
 
 class Page(object):
     def __init__(self, page_idx, db):
@@ -1223,7 +1245,11 @@ class Record(object):
                     serial_type,
                     bytes(self)[field_offset:field_offset + col_length]
                 )
-            except MalformedField:
+            except MalformedField as ex:
+                _LOGGER.warning(
+                    "Caught %r while instantiating field %d (%d)",
+                    ex, col_idx, serial_type
+                )
                 raise MalformedRecord
             except Exception as ex:
                 _LOGGER.warning(
@@ -1463,6 +1489,71 @@ def dump_to_csv(args):
         table.csv_dump(out_dir)
 
 
+def undelete(args):
+    db_abspath = os.path.abspath(args.sqlite_path)
+    db = _load_db(db_abspath)
+
+    output_path = os.path.abspath(args.output_path)
+    if os.path.exists(output_path):
+        raise ValueError("Output file {} exists!".format(output_path))
+
+    shutil.copyfile(db_abspath, output_path)
+    with sqlite3.connect(output_path) as output_db_connection:
+        cursor = output_db_connection.cursor()
+        for table_name in sorted(db.tables):
+            table = db.tables[table_name]
+            _LOGGER.info("Table \"%s\"", table)
+            table.recover_records()
+
+            failed_inserts = 0
+            constraint_violations = 0
+            successful_inserts = 0
+            for leaf_page in table.leaves:
+                if not leaf_page.recovered_records:
+                    continue
+
+                for record in leaf_page.recovered_records:
+                    insert_statement, values = table.build_insert_SQL(record)
+
+                    try:
+                        cursor.execute(insert_statement, values)
+                    except sqlite3.IntegrityError:
+                        # We gotta soldier on, there's not much we can do if a
+                        # constraint is violated by this insert
+                        constraint_violations += 1
+                    except (
+                                sqlite3.ProgrammingError,
+                                sqlite3.OperationalError,
+                                sqlite3.InterfaceError
+                            ) as insert_ex:
+                        _LOGGER.warning(
+                            (
+                                "Caught %r while executing INSERT statement "
+                                "in \"%s\""
+                            ),
+                            insert_ex,
+                            table
+                        )
+                        failed_inserts += 1
+                        # pdb.set_trace()
+                    else:
+                        successful_inserts += 1
+            if failed_inserts > 0:
+                _LOGGER.warning(
+                    "%d failed INSERT statements in \"%s\"",
+                    failed_inserts, table
+                )
+            if constraint_violations > 0:
+                _LOGGER.warning(
+                    "%d constraint violations statements in \"%s\"",
+                    constraint_violations, table
+                )
+            _LOGGER.info(
+                "%d successful INSERT statements in \"%s\"",
+                successful_inserts, table
+            )
+
+
 def find_in_db(args):
     db = _load_db(args.sqlite_path)
     db.grep(args.needle)
@@ -1471,6 +1562,7 @@ def find_in_db(args):
 subcmd_actions = {
     'csv':  dump_to_csv,
     'grep': find_in_db,
+    'undelete': undelete,
 }
 
 
@@ -1532,6 +1624,24 @@ def main():
     grep_parser.add_argument(
         'needle',
         help='String to match in the database'
+    )
+
+    undelete_parser = subcmd_parsers.add_parser(
+        'undelete',
+        parents=[verbose_parser],
+        help='Inserts recovered records into a copy of the database',
+        description=(
+            'Recovers as many records as possible from the database passed as '
+            'argument and inserts all recovered records into a copy of'
+        ),
+    )
+    undelete_parser.add_argument(
+        'sqlite_path',
+        help='sqlite3 file path'
+    )
+    undelete_parser.add_argument(
+        'output_path',
+        help='Output database path'
     )
 
     cli_args = cli_parser.parse_args()
