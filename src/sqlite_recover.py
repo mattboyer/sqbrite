@@ -176,6 +176,7 @@ class SQLite_DB(object):
         self._tables = {}
         self._table_columns = {}
         self._freelist_leaves = []
+        self._freelist_btree_pages = []
 
     @property
     def ptrmap(self):
@@ -545,6 +546,8 @@ class SQLite_DB(object):
                 while parent:
                     root_table = parent.table
                     parent = parent.parent
+                if root_table is None:
+                    self._freelist_btree_pages.append(page)
 
                 _LOGGER.debug(
                     "Reparenting %r to table \"%s\"",
