@@ -1633,6 +1633,7 @@ def main():
         description=(
             'Recovers as many records as possible from the database passed as '
             'argument and inserts all recovered records into a copy of'
+            'the database.'
         ),
     )
     undelete_parser.add_argument(
