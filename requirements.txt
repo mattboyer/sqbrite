@@ -10,4 +10,5 @@ pyxdg
 requests
 setuptools
 sqlalchemy
+sqlite3
 tox
