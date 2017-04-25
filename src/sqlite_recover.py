@@ -1313,7 +1313,7 @@ class Field(object):
 
     # TODO Raise a specific exception when bad bytes are encountered for the
     # fields and then use this to weed out bad freeblock records
-    def _parse(self):
+    def _parse(self):   # pylint:disable=MC0001
         if self._type == 0:
             self._value = 'NULL'
         elif self._type == 1:
