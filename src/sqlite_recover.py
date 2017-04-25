@@ -1311,41 +1311,34 @@ class Field(object):
         self._value = None
         self._parse()
 
+    def _check_length(self, expected_length):
+        if len(self) != expected_length:
+            raise MalformedField
+
     # TODO Raise a specific exception when bad bytes are encountered for the
     # fields and then use this to weed out bad freeblock records
-    def _parse(self):   # pylint:disable=MC0001
+    def _parse(self):
         if self._type == 0:
             self._value = 'NULL'
+        # Integer types
         elif self._type == 1:
-            if 1 != len(self):
-                raise MalformedField
-            else:
-                self._value = decode_twos_complement(bytes(self)[0:1], 8)
+            self._check_length(1)
+            self._value = decode_twos_complement(bytes(self)[0:1], 8)
         elif self._type == 2:
-            if 2 != len(self):
-                raise MalformedField
-            else:
-                self._value = decode_twos_complement(bytes(self)[0:2], 16)
+            self._check_length(2)
+            self._value = decode_twos_complement(bytes(self)[0:2], 16)
         elif self._type == 3:
-            if 3 != len(self):
-                raise MalformedField
-            else:
-                self._value = decode_twos_complement(bytes(self)[0:3], 24)
+            self._check_length(3)
+            self._value = decode_twos_complement(bytes(self)[0:3], 24)
         elif self._type == 4:
-            if 4 != len(self):
-                raise MalformedField
-            else:
-                self._value = decode_twos_complement(bytes(self)[0:4], 32)
+            self._check_length(4)
+            self._value = decode_twos_complement(bytes(self)[0:4], 32)
         elif self._type == 5:
-            if 6 != len(self):
-                raise MalformedField
-            else:
-                self._value = decode_twos_complement(bytes(self)[0:6], 48)
+            self._check_length(6)
+            self._value = decode_twos_complement(bytes(self)[0:6], 48)
         elif self._type == 6:
-            if 8 != len(self):
-                raise MalformedField
-            else:
-                self._value = decode_twos_complement(bytes(self)[0:8], 64)
+            self._check_length(8)
+            self._value = decode_twos_complement(bytes(self)[0:8], 64)
 
         elif self._type == 7:
             self._value = struct.unpack(r'>d', bytes(self)[0:8])[0]
