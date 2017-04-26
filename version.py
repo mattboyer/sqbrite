@@ -3,8 +3,8 @@
 # This file is placed into the public domain.
 
 # Calculates the current version number.  If possible, this is the
-# output of “git describe”, modified to conform to the versioning
-# scheme that setuptools uses.  If “git describe” returns an error
+# output of "git describe", modified to conform to the versioning
+# scheme that setuptools uses.  If "git describe" returns an error
 # (most likely because we're in an unpacked copy of a release tarball,
 # rather than in a git working copy), then we fall back on reading the
 # contents of the RELEASE-VERSION file.
