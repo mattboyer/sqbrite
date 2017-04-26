@@ -11,10 +11,11 @@ Bring that shine back into your database with SQBrite!
 
 ``sqbrite`` is a data recovery/forensics tool for SQLite databases.
 
-.. raw:: html
-    <a href="https://asciinema.org/a/14"><img src="https://asciinema.org/a/14.png" width="836"/></a>
+.. image:: https://asciinema.org/a/dq9j9oeje763429i9d9ypj7pd.png
+    :target: https://asciinema.org/a/dq9j9oeje763429i9d9ypj7pd
+    :alt: Termcast
 
-foo
+Foo
 ---
 
 Foo sure is ``bar``!!
