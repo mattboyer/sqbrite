@@ -83,7 +83,7 @@ def get_git_version(abbrev=4):
     # Read in the version that's currently in RELEASE-VERSION.
     release_version = read_release_version()
 
-    # First try to get the current version using “git describe”.
+    # First try to get the current version using "git describe".
     try:
         version = call_git_describe(abbrev)
     except GitError:
