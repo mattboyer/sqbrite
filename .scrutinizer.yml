@@ -1,9 +1,12 @@
 checks:
-        python:
-                code_rating: true
-                duplicate_code: true
+  python:
+    code_rating: true
+    duplicate_code: true
 
 build:
-        tests:
-                override:
-                        -  pylint-run src/
+  environment:
+    python: '3.6.0'
+
+tests:
+  override:
+    -  pylint-run src/
