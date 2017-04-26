@@ -1,13 +1,7 @@
-blessings
-coverage
-coveralls
 ipdb
-mock
-nose
 pep8
 pylint
+pylint-mccabe
 pyxdg
-requests
 setuptools
-sqlalchemy
 tox
