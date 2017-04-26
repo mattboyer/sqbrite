@@ -1,6 +1,6 @@
 checks:
   python:
-    code_rating: true
+    code_rating: false
     duplicate_code: true
 
 build:
