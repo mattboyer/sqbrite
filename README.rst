@@ -12,7 +12,7 @@ Bring that shine back into your database with SQBrite!
 ``sqbrite`` is a data recovery/forensics tool for SQLite databases.
 
 .. raw:: html
-    <marquee>dfdsfds</marquee>
+    <h3>dfdsfds</h3>
 
 foo
 ---
