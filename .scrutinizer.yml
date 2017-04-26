@@ -10,3 +10,7 @@ build:
   dependencies:
     before:
       - 'pip install -r requirements.txt'
+
+  tests:
+    override:
+      -  pylint-run src/ setup.py version.py
