@@ -1,4 +1,0 @@
-python-targets:
-        - 3
-requirements:
-        - requirements.txt
