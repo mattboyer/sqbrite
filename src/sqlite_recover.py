@@ -601,8 +601,10 @@ class SQLite_DB(object):
                     # fields of a given known table. Integers, NULLs and
                     # fixed-length strings (GUIDs) would be used as part of
                     # that signature mechanism
+                    if not page.cells:
+                        continue
+
                     first_record = page.cells[0][1]
-                    pdb.set_trace()
                     matches = []
                     for table_name in signatures:
                         # All records within a given page are for the same
@@ -778,7 +780,6 @@ class Table(object):
                 # Recovered records are in an unordered set because their rowid
                 # has been lost, making sorting impossible
                 for record in leaf_page.recovered_records:
-                    assert(self.check_signature(record))
                     values_iter = (
                         record.fields[idx].value for idx in record.fields
                     )
@@ -827,7 +828,6 @@ class Table(object):
             if field.value is None:
                 continue
             if not isinstance(field.value, sig[field_idx]):
-                pdb.set_trace()
                 return False
         return True
 
@@ -1236,6 +1236,8 @@ class BTreePage(Page):
                     len(field_obj) for field_obj in record_obj.fields.values()
                 )
                 record_obj.truncate(field_lengths + len(record_obj.header))
+                if not self.table.check_signature(record_obj):
+                    continue
                 self._recovered_records.add(record_obj)
 
                 recovered_bytes += len(bytes(record_obj))
