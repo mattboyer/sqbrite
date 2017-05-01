@@ -601,12 +601,12 @@ class SQLite_DB(object):
                     # fields of a given known table. Integers, NULLs and
                     # fixed-length strings (GUIDs) would be used as part of
                     # that signature mechanism
+                    first_record = page.cells[0][1]
                     pdb.set_trace()
                     matches = []
                     for table_name in signatures:
                         # All records within a given page are for the same
                         # table
-                        first_record = page.cells[0]
                         if self.tables[table_name].check_signature(
                                 first_record):
                             matches.append(self.tables[table_name])
@@ -816,6 +816,8 @@ class Table(object):
         except KeyError:
             # The sqlite schema tables don't have a signature (or need one)
             return True
+        if len(record.fields) > len(self.columns):
+            return False
 
         # It's OK for a record to have fewer fields than there are columns in
         # this table, this is seen when NULLable or default-valued columns are
