@@ -589,18 +589,6 @@ class SQLite_DB(object):
                     self._freelist_btree_pages.append(page)
 
                 if root_table is None:
-                    # So that's our main problem. We have a valid B-Tree Leaf
-                    # page, but no idea what table it belongs to. The only
-                    # thing we have to determine its table is the make-up of
-                    # its records.
-                    #
-                    # Basically, we need to extend the logic currently in use
-                    # to associate regexps and offsets to table and add some
-                    # sort of signature mechanism that we can use to determine
-                    # whether a given freeleaf record matches the invariant
-                    # fields of a given known table. Integers, NULLs and
-                    # fixed-length strings (GUIDs) would be used as part of
-                    # that signature mechanism
                     if not page.cells:
                         continue
 
