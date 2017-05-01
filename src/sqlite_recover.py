@@ -602,7 +602,29 @@ class SQLite_DB(object):
                     # fixed-length strings (GUIDs) would be used as part of
                     # that signature mechanism
                     pdb.set_trace()
-                    continue
+                    matches = []
+                    for table_name in signatures:
+                        # All records within a given page are for the same
+                        # table
+                        first_record = page.cells[0]
+                        if self.tables[table_name].check_signature(
+                                first_record):
+                            matches.append(self.tables[table_name])
+                    if not matches:
+                        _LOGGER.error(
+                            "Couldn't find a matching table for %r",
+                            page
+                        )
+                        continue
+                    if len(matches) > 1:
+                        _LOGGER.error(
+                            "Multiple matching tables for %r: %r",
+                            page, matches
+                        )
+                        continue
+                    elif len(matches) == 1:
+                        root_table = matches[0]
+
                 _LOGGER.debug(
                     "Reparenting %r to table \"%s\"",
                     page, root_table.name
@@ -756,6 +778,7 @@ class Table(object):
                 # Recovered records are in an unordered set because their rowid
                 # has been lost, making sorting impossible
                 for record in leaf_page.recovered_records:
+                    assert(self.check_signature(record))
                     values_iter = (
                         record.fields[idx].value for idx in record.fields
                     )
@@ -794,6 +817,9 @@ class Table(object):
             # The sqlite schema tables don't have a signature (or need one)
             return True
 
+        # It's OK for a record to have fewer fields than there are columns in
+        # this table, this is seen when NULLable or default-valued columns are
+        # added in an ALTER TABLE statement.
         for field_idx, field in record.fields.items():
             # NULL can be a value for any column type
             if field.value is None:
