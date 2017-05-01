@@ -20,6 +20,13 @@ Features
 
 - Export all records to CSV or reinject "undeleted" records into a copy of the database
 - Extensible heuristics - just add entries to ``~/.local/share/sqbrite/sqbrite.json``
+- ``sqbrite`` can recover records from within active B-tree table leaf pages or from Freelist leaf pages
+
+Heuristics
+----------
+
+The SQLite file format doesn't keep track of where deleted records start and end within a B-tree leaf page. This means that ``sqbrite`` needs a mechanism to find out where record headers start. This is achieved by means of regular expressions specific to tables in known databases.
+
 
 Limitations
 -----------
