@@ -113,7 +113,7 @@ type_specs = {
     'LONGVARCHAR': str,
     'REAL': float,
     'FLOAT': float,
-    'LONG': float,
+    'LONG': int,
     'BLOB': bytes,
 }
 
@@ -617,16 +617,6 @@ class SQLite_DB(object):
                 len(reparented_pages), [p.idx for p in reparented_pages]
             )
 
-    def check_page_signature(self, page):
-        # So what about the signature?
-        # For now, let's consider the following column specifiers
-        # N -> NULL
-        # I -> Integer (regardless of size)
-        # F -> Float
-        # T -> Text
-        # T{0-9}+ -> Text (of specified length)
-        pass
-
     def grep(self, needle):
         match_found = False
         page_idx = 1
@@ -747,6 +737,8 @@ class Table(object):
             for leaf_page in self.leaves:
                 for cell_idx in leaf_page.cells:
                     rowid, record = leaf_page.cells[cell_idx]
+                    assert(self.check_signature(record))
+
                     _LOGGER.debug('Record %d: %r', rowid, record.header)
                     fields_iter = (
                         repr(record.fields[idx]) for idx in record.fields
@@ -785,7 +777,7 @@ class Table(object):
         value_kwargs = {}
         for col_idx, col_name in enumerate(self._columns):
             try:
-                if record.fields[col_idx].value == 'NULL':
+                if record.fields[col_idx].value is None:
                     value_kwargs[col_name] = None
                 else:
                     value_kwargs[col_name] = record.fields[col_idx].value
@@ -796,7 +788,20 @@ class Table(object):
 
     def check_signature(self, record):
         assert isinstance(record, Record)
-        pdb.set_trace()
+        try:
+            sig = signatures[self.name]
+        except KeyError:
+            # The sqlite schema tables don't have a signature (or need one)
+            return True
+
+        for field_idx, field in record.fields.items():
+            # NULL can be a value for any column type
+            if field.value is None:
+                continue
+            if not isinstance(field.value, sig[field_idx]):
+                pdb.set_trace()
+                return False
+        return True
 
 
 class Page(object):
@@ -1390,7 +1395,7 @@ class Field(object):
     # fields and then use this to weed out bad freeblock records
     def _parse(self):
         if self._type == 0:
-            self._value = 'NULL'
+            self._value = None
         # Integer types
         elif self._type == 1:
             self._check_length(1)
