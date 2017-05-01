@@ -106,7 +106,20 @@ SQLite_master_record = collections.namedtuple('SQLite_master_record', (
 ))
 
 
+type_specs = {
+    'INTEGER': int,
+    'TEXT': str,
+    'VARCHAR': str,
+    'LONGVARCHAR': str,
+    'REAL': float,
+    'FLOAT': float,
+    'LONG': int,
+    'BLOB': bytes,
+}
+
+
 heuristics = {}
+signatures = {}
 
 
 def heuristic_factory(magic, offset):
@@ -133,12 +146,12 @@ def load_heuristics():
     def _load_from_json(raw_json):
         if isinstance(raw_json, bytes):
             raw_json = raw_json.decode('utf-8')
-        for table_name, heuristic_params in json.loads(raw_json).items():
+        for table_name, table_props in json.loads(raw_json).items():
             magic = base64.standard_b64decode(
-                heuristic_params['magic']
+                table_props['magic']
             )
             heuristics[table_name] = heuristic_factory(
-                magic, heuristic_params['offset']
+                magic, table_props['offset']
             )
             _LOGGER.debug("Loaded heuristics for \"%s\"", table_name)
 
@@ -176,6 +189,7 @@ class SQLite_DB(object):
         self._tables = {}
         self._table_columns = {}
         self._freelist_leaves = []
+        self._freelist_btree_pages = []
 
     @property
     def ptrmap(self):
@@ -492,6 +506,32 @@ class SQLite_DB(object):
                     )
                 ]
                 columns = [col.split()[0] for col in cols]
+                signature = []
+
+                # Some column definitions lack a type
+                for col_def in cols:
+                    def_tokens = col_def.split()
+                    try:
+                        col_type = def_tokens[1]
+                    except IndexError:
+                        signature.append(object)
+                        continue
+
+                    _LOGGER.debug(
+                        "Column \"%s\" is defined as \"%s\"",
+                        def_tokens[0], col_type
+                    )
+                    try:
+                        signature.append(type_specs[col_type])
+                    except KeyError:
+                        _LOGGER.warning("No native type for \"%s\"", col_def)
+                        signature.append(object)
+                _LOGGER.info(
+                    "Signature for table \"%s\": %r",
+                    master_record.name, signature
+                )
+                signatures[master_record.name] = signature
+
                 _LOGGER.info(
                     "Columns for table \"%s\": %r",
                     master_record.name, columns
@@ -545,6 +585,35 @@ class SQLite_DB(object):
                 while parent:
                     root_table = parent.table
                     parent = parent.parent
+                if root_table is None:
+                    self._freelist_btree_pages.append(page)
+
+                if root_table is None:
+                    if not page.cells:
+                        continue
+
+                    first_record = page.cells[0][1]
+                    matches = []
+                    for table_name in signatures:
+                        # All records within a given page are for the same
+                        # table
+                        if self.tables[table_name].check_signature(
+                                first_record):
+                            matches.append(self.tables[table_name])
+                    if not matches:
+                        _LOGGER.error(
+                            "Couldn't find a matching table for %r",
+                            page
+                        )
+                        continue
+                    if len(matches) > 1:
+                        _LOGGER.error(
+                            "Multiple matching tables for %r: %r",
+                            page, matches
+                        )
+                        continue
+                    elif len(matches) == 1:
+                        root_table = matches[0]
 
                 _LOGGER.debug(
                     "Reparenting %r to table \"%s\"",
@@ -680,6 +749,8 @@ class Table(object):
             for leaf_page in self.leaves:
                 for cell_idx in leaf_page.cells:
                     rowid, record = leaf_page.cells[cell_idx]
+                    # assert(self.check_signature(record))
+
                     _LOGGER.debug('Record %d: %r', rowid, record.header)
                     fields_iter = (
                         repr(record.fields[idx]) for idx in record.fields
@@ -718,7 +789,7 @@ class Table(object):
         value_kwargs = {}
         for col_idx, col_name in enumerate(self._columns):
             try:
-                if record.fields[col_idx].value == 'NULL':
+                if record.fields[col_idx].value is None:
                     value_kwargs[col_name] = None
                 else:
                     value_kwargs[col_name] = record.fields[col_idx].value
@@ -726,6 +797,27 @@ class Table(object):
                 value_kwargs[col_name] = None
 
         return insert_statement, value_kwargs
+
+    def check_signature(self, record):
+        assert isinstance(record, Record)
+        try:
+            sig = signatures[self.name]
+        except KeyError:
+            # The sqlite schema tables don't have a signature (or need one)
+            return True
+        if len(record.fields) > len(self.columns):
+            return False
+
+        # It's OK for a record to have fewer fields than there are columns in
+        # this table, this is seen when NULLable or default-valued columns are
+        # added in an ALTER TABLE statement.
+        for field_idx, field in record.fields.items():
+            # NULL can be a value for any column type
+            if field.value is None:
+                continue
+            if not isinstance(field.value, sig[field_idx]):
+                return False
+        return True
 
 
 class Page(object):
@@ -847,7 +939,7 @@ class BTreePage(Page):
         self._overflow_threshold = self.usable_size - 35
 
         if self._btree_header.page_type not in BTreePage.btree_page_types:
-            pdb.set_trace()
+            # pdb.set_trace()
             raise ValueError
 
         # We have a twelve-byte header, need to read it again
@@ -1319,7 +1411,7 @@ class Field(object):
     # fields and then use this to weed out bad freeblock records
     def _parse(self):
         if self._type == 0:
-            self._value = 'NULL'
+            self._value = None
         # Integer types
         elif self._type == 1:
             self._check_length(1)
