@@ -25,4 +25,4 @@ Limitations
 -----------
 
 - ``sqbrite`` works better when ``ptrmap`` pages are present
-- ``sqbrite`` cannot recover records deleted with the `SQLite ``secure_delete`` <https://www.sqlite.org/pragma.html#pragma_secure_delete> pragma`_ enabled
+- ``sqbrite`` cannot recover records deleted with the `SQLite secure_delete <https://www.sqlite.org/pragma.html#pragma_secure_delete> pragma`_ enabled
