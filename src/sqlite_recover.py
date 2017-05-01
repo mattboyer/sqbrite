@@ -761,7 +761,7 @@ class Table(object):
             for leaf_page in self.leaves:
                 for cell_idx in leaf_page.cells:
                     rowid, record = leaf_page.cells[cell_idx]
-                    assert(self.check_signature(record))
+                    # assert(self.check_signature(record))
 
                     _LOGGER.debug('Record %d: %r', rowid, record.header)
                     fields_iter = (
@@ -1236,8 +1236,6 @@ class BTreePage(Page):
                     len(field_obj) for field_obj in record_obj.fields.values()
                 )
                 record_obj.truncate(field_lengths + len(record_obj.header))
-                if not self.table.check_signature(record_obj):
-                    continue
                 self._recovered_records.add(record_obj)
 
                 recovered_bytes += len(bytes(record_obj))
