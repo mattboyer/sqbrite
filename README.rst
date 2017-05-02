@@ -11,7 +11,7 @@ Bring that shine back into your database with SQBrite!
 
 ``sqbrite`` is a data recovery/forensics tool for `SQLite <https://www.sqlite.org/>`_ databases. It uses a Python 3 implementation of the `SQLite on-disk file format <https://www.sqlite.org/fileformat2.html>`_ to recover deleted table rows.
 
-SQBrite's name is inspired by @inflex `PL Daniels' <https://github.com/inflex>`_ `undark <http://pldaniels.com/undark/>`_, but is a completely separate implementation.
+SQBrite's name is inspired by `PL Daniels' <https://github.com/inflex>`_ `undark <http://pldaniels.com/undark/>`_, but is a completely separate implementation.
 
 Background
 ----------
@@ -21,14 +21,15 @@ SQLite uses a paginated data model in which each database is a collection of sam
 Heuristics
 ++++++++++
 
-The SQLite file format doesn't keep track of where deleted records start and end within a leaf page's freeblocks. This means that ``sqbrite`` needs a mechanism to find out where record headers start. This is achieved by means of regular expressions specific to tables in known databases. These regular expressions and the offset that separates matches from the first byte in a well-formed header are stored in a user-editable JSON file. ``sqbrite`` aims to ship with heuristics for popular SQLite databases, so *do* send pull requests if you've got good results with your heuristics.
+The SQLite file format doesn't keep track of where deleted records start and end within a leaf page's freeblocks. This means that ``sqbrite`` needs a mechanism to find out where record headers start. This is achieved by means of regular expressions specific to tables in known databases. These regular expressions and the offset that separates matches from the first byte in a well-formed header are stored in a user-editable JSON file.
+``sqbrite`` aims to ship with heuristics for popular SQLite databases, so *do* send pull requests if you've got good results with your heuristics.
 
 Features
 --------
 
 - Export all records to CSV or reinject "undeleted" records into a copy of the database
 - Extensible heuristics - just add entries to ``~/.local/share/sqbrite/sqbrite.json``!
-- ``sqbrite`` can recover records from within active B-tree table leaf pages or from Freelist leaf pages
+- ``sqbrite`` can recover records from within active B-tree table leaf pages or from former table-leaf Freelist pages.
 
 Limitations
 -----------
