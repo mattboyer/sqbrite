@@ -11,7 +11,7 @@ Bring that shine back into your database with SQBrite!
 
 ``sqbrite`` is a data recovery/forensics tool for `SQLite <https://www.sqlite.org/>`_ databases. It uses a Python 3 implementation of the `SQLite on-disk file format <https://www.sqlite.org/fileformat2.html>`_ to recover deleted table rows.
 
-SQBrite's name is inspired by `PL Daniels' <https://github.com/inflex>`_ `undark <http://pldaniels.com/undark/>`_, but is a completely separate implementation.
+SQBrite's name is inspired by @inflex `PL Daniels' <https://github.com/inflex>`_ `undark <http://pldaniels.com/undark/>`_, but is a completely separate implementation.
 
 Background
 ----------
