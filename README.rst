@@ -9,6 +9,18 @@ Bring the shine back into your database with SQBrite!
     :target: https://scrutinizer-ci.com/g/mattboyer/sqbrite/?branch=master
     :alt: Scrutinizer Code Quality
 
+.. image:: https://img.shields.io/pypi/v/sqbrite.svg
+    :target: https://pypi.python.org/pypi/sqbrite/
+    :alt: Latest Version
+
+.. image:: https://img.shields.io/pypi/format/sqbrite.svg
+    :target: https://pypi.python.org/pypi/sqbrite/
+    :alt: Download format
+
+.. image:: https://img.shields.io/pypi/pyversions/sqbrite.svg
+    :target: https://pypi.python.org/pypi/sqbrite/
+    :alt: Supported Python versions
+
 SQBrite is a data recovery/forensics tool for `SQLite <https://www.sqlite.org/>`_ databases. It uses a Python 3 implementation of the `SQLite on-disk file format <https://www.sqlite.org/fileformat2.html>`_ to recover deleted table rows.
 
 SQBrite's name is inspired by `PL Daniels' <https://github.com/inflex>`_ `undark <http://pldaniels.com/undark/>`_, but is a completely separate implementation.
@@ -17,6 +29,15 @@ SQBrite's name is inspired by `PL Daniels' <https://github.com/inflex>`_ `undark
     :target: https://asciinema.org/a/118939
     :alt: SQBrite demo terminal recording
 
+Installing SQBrite
+------------------
+
+SQBrite requires Python 3. To install, simply run:
+
+.. code-block:: bash
+
+    $ pip3 install --user sqbrite
+    $ sqbrite --help
 
 Background
 ----------

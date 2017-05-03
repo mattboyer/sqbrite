@@ -40,6 +40,12 @@ setup(
     license='BSD',
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
+        'Intended Audience :: Science/Research',
+        'License :: OSI Approved :: MIT License',
+        'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.6',
+        'Topic :: Database',
+        'Topic :: System :: Recovery Tools',
     ],
     packages=package_names(),
     # Packaging data files in Python is a complete shitshow
