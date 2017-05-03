@@ -16,7 +16,7 @@ SQBrite's name is inspired by `PL Daniels' <https://github.com/inflex>`_ `undark
 Background
 ----------
 
-SQLite uses a paginated data model in which each database is a collection of same-size *pages*. There are several kinds of pages, of which one type (B-Tree Table Leaf pages) contains the starting point for actual data belonging to table rows.
+SQLite uses a paginated data model in which each database is a collection of same-size *pages*. There are several kinds of pages, of which one type (B-Tree Table Leaf pages) contains the starting point for actual data belonging to individual table rows.
 
 When a row is deleted by means of a ``DELETE FROM table (...)`` statement, the space occupied by that row's data (a *record*) within the relevant B-Tree Table Leaf page is marked as free and may subsequently be used to store new records or update existing records. However, it is common to see freed space within a page (a *freeblock*, in SQLite parlance) left alone after rows are deleted. In that case, it ***may*** be possible to retrieve deleted row data from within the freeblock.
 
