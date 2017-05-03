@@ -48,6 +48,7 @@ setup(
     package_dir={PROJECT_NAME: 'src'},
     install_requires=[
         'pyxdg',
+        'pyyaml',
     ],
     entry_points={
         'console_scripts': [

@@ -21,13 +21,11 @@
 # SOFTWARE.
 
 from . import constants
-from . import PROJECT_NAME, PROJECT_DESCRIPTION, USER_JSON_PATH, BUILTIN_JSON
+from . import PROJECT_NAME, PROJECT_DESCRIPTION, USER_YAML_PATH, BUILTIN_YAML
 
 import argparse
-import base64
 import collections
 import csv
-import json
 import logging
 import os
 import os.path
@@ -39,6 +37,7 @@ import sqlite3
 import stat
 import struct
 import tempfile
+import yaml
 
 
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s')
@@ -143,25 +142,35 @@ def heuristic_factory(magic, offset):
 
 def load_heuristics():
 
-    def _load_from_json(raw_json):
-        if isinstance(raw_json, bytes):
-            raw_json = raw_json.decode('utf-8')
-        for table_name, table_props in json.loads(raw_json).items():
-            magic = base64.standard_b64decode(
-                table_props['magic']
-            )
-            heuristics[table_name] = heuristic_factory(
-                magic, table_props['offset']
-            )
-            _LOGGER.debug("Loaded heuristics for \"%s\"", table_name)
+    def _load_from_yaml(yaml_string):
+        if isinstance(yaml_string, bytes):
+            yaml_string = yaml_string.decode('utf-8')
 
-    with pkg_resources.resource_stream(PROJECT_NAME, BUILTIN_JSON) as builtin:
-        _load_from_json(builtin.read())
+        raw_yaml = yaml.load(yaml_string)
+        for table_grouping, tables in raw_yaml.items():
+            _LOGGER.info(
+                "Loading raw_yaml for table grouping \"%s\"",
+                table_grouping
+            )
+            for table_name, table_props in tables.items():
+                heuristics[table_name] = heuristic_factory(
+                    table_props['magic'], table_props['offset']
+                )
+                _LOGGER.debug("Loaded heuristics for \"%s\"", table_name)
 
-    if not os.path.exists(USER_JSON_PATH):
+    with pkg_resources.resource_stream(PROJECT_NAME, BUILTIN_YAML) as builtin:
+        try:
+            _load_from_yaml(builtin.read())
+        except KeyError:
+            raise SystemError("Malformed builtin magic file")
+
+    if not os.path.exists(USER_YAML_PATH):
         return
-    with open(USER_JSON_PATH, 'r') as user_json:
-        _load_from_json(user_json.read())
+    with open(USER_YAML_PATH, 'r') as user_yaml:
+        try:
+            _load_from_yaml(user_yaml.read())
+        except KeyError:
+            raise SystemError("Malformed user magic file")
 
 
 class IndexDict(dict):
