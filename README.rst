@@ -13,6 +13,11 @@ SQBrite is a data recovery/forensics tool for `SQLite <https://www.sqlite.org/>`
 
 SQBrite's name is inspired by `PL Daniels' <https://github.com/inflex>`_ `undark <http://pldaniels.com/undark/>`_, but is a completely separate implementation.
 
+.. image:: https://asciinema.org/a/118939.png
+    :target: https://asciinema.org/a/118939
+    :alt: Termcast
+
+
 Background
 ----------
 
@@ -33,6 +38,7 @@ Features
 - Export all records to CSV or reinject "undeleted" records into a copy of the database
 - Extensible heuristics - just add entries to ``~/.local/share/sqbrite/sqbrite.yaml``!
 - SQBrite can recover records from within active B-tree table leaf pages or from former table-leaf Freelist pages.
+- Heuristics for iOS and Firefox databases
 
 Limitations
 -----------
