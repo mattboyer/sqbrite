@@ -15,7 +15,7 @@ SQBrite's name is inspired by `PL Daniels' <https://github.com/inflex>`_ `undark
 
 .. image:: https://asciinema.org/a/118939.png
     :target: https://asciinema.org/a/118939
-    :alt: Termcast
+    :alt: SQBrite demo terminal recording
 
 
 Background
