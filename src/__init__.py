@@ -26,9 +26,9 @@ import xdg.BaseDirectory
 PROJECT_NAME = 'sqbrite'
 PROJECT_DESCRIPTION = 'SQ-Brite is a data recovery tool for SQLite databases'
 
-USER_JSON_PATH = os.path.join(
+USER_YAML_PATH = os.path.join(
     xdg.BaseDirectory.save_data_path(PROJECT_NAME),
-    PROJECT_NAME + '.json'
+    PROJECT_NAME + '.yaml'
 )
 
-BUILTIN_JSON = 'magic/sqbrite.json'
+BUILTIN_YAML = 'magic/sqbrite.yaml'
