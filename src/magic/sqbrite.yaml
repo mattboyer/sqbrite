@@ -1,0 +1,11 @@
+%YAML 1.2
+# SQBrite heuristics
+---
+
+# Mozilla Firefox tables
+Firefox:
+  moz_places:
+    magic: !!binary "ACguezN9KQgICA=="
+    offset: 1
+
+...
