@@ -23,7 +23,7 @@ When a row is deleted by means of a ``DELETE FROM table (...)`` statement, the s
 Heuristics
 ++++++++++
 
-The SQLite file format doesn't keep track of where deleted records start and end within a leaf page's freeblocks. This means that SQBrite needs a mechanism to find out where record headers start. This is achieved through the use of byte-wise regular expressions specific to tables in known databases. These regular expressions and the offset that separates matches from the first byte in a well-formed header are stored in a user-editable JSON file.
+The SQLite file format doesn't keep track of where deleted records start and end within a leaf page's freeblocks. This means that SQBrite needs a mechanism to find out where record headers start. This is achieved through the use of byte-wise regular expressions specific to tables in known databases. These regular expressions and the offset that separates matches from the first byte in a well-formed header are stored in a user-editable YAML file.
 
 SQBrite aims to ship with heuristics for popular SQLite databases, so **do** send pull requests if you've got good results with your heuristics.
 
@@ -31,7 +31,7 @@ Features
 --------
 
 - Export all records to CSV or reinject "undeleted" records into a copy of the database
-- Extensible heuristics - just add entries to ``~/.local/share/sqbrite/sqbrite.json``!
+- Extensible heuristics - just add entries to ``~/.local/share/sqbrite/sqbrite.yaml``!
 - SQBrite can recover records from within active B-tree table leaf pages or from former table-leaf Freelist pages.
 
 Limitations
