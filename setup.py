@@ -4,7 +4,7 @@ import os
 import shutil
 
 import version
-from src import PROJECT_NAME, PROJECT_DESCRIPTION
+from src import PROJECT_NAME, PROJECT_DESCRIPTION, README_PATH
 
 
 class SdistAndClean(SetuptoolsSdist):
@@ -27,6 +27,10 @@ def package_names():
     return [PROJECT_NAME] + \
         [PROJECT_NAME + '.' + package for package in find_packages('src')]
 
+long_description = None
+with open(README_PATH, 'r') as readme:
+    long_description = readme.read()
+
 setup(
     cmdclass={
         'sdist': SdistAndClean,
@@ -35,9 +39,9 @@ setup(
     version=version.get_git_version(),
     url='https://github.com/mattboyer/sqbrite',
     description=PROJECT_DESCRIPTION,
+    long_description=long_description or PROJECT_DESCRIPTION,
     author='Matt Boyer',
     author_email='mboyer@sdf.org',
-    license='BSD',
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
         'Intended Audience :: Science/Research',
