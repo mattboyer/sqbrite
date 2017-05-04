@@ -24,7 +24,8 @@ import os
 import xdg.BaseDirectory
 
 PROJECT_NAME = 'sqbrite'
-PROJECT_DESCRIPTION = 'SQ-Brite is a data recovery tool for SQLite databases'
+PROJECT_DESCRIPTION = 'SQBrite is a data recovery tool for SQLite databases'
+README_PATH = 'README.rst'
 
 USER_YAML_PATH = os.path.join(
     xdg.BaseDirectory.save_data_path(PROJECT_NAME),
