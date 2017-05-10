@@ -25,14 +25,15 @@ import os
 import tempfile
 
 from . import _LOGGER
-from .records import Record
+from .record import Record
 from .pages import BTreePage
 
 
 class Table(object):
-    def __init__(self, name, db, rootpage):
+    def __init__(self, name, db, rootpage, signatures):
         self._name = name
         self._db = db
+        self._signatures = signatures
         assert(isinstance(rootpage, BTreePage))
         self._root = rootpage
         self._leaves = []
@@ -179,7 +180,7 @@ class Table(object):
     def check_signature(self, record):
         assert isinstance(record, Record)
         try:
-            sig = signatures[self.name]
+            sig = self._signatures[self.name]
         except KeyError:
             # The sqlite schema tables don't have a signature (or need one)
             return True

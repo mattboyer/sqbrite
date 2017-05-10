@@ -40,9 +40,11 @@ from .pages import (
     Page, OverflowPage, FreelistLeafPage, FreelistTrunkPage, BTreePage,
     PtrmapPage
 )
-from .records import Record
+from .record import Record
 from .table import Table
-from .tuples import (SQLite_header, SQLite_ptrmap_info, SQLite_master_record)
+from .tuples import (
+    SQLite_header, SQLite_ptrmap_info, SQLite_master_record, type_specs
+)
 
 
 heuristics = {}
@@ -384,7 +386,7 @@ class SQLite_DB(object):
                 pass
 
             try:
-                page_obj = BTreePage(page_idx, self)
+                page_obj = BTreePage(page_idx, self, heuristics)
             except ValueError:
                 # This page isn't a valid btree page. This can happen if we
                 # don't have a ptrmap to guide us
@@ -473,7 +475,7 @@ class SQLite_DB(object):
         first_page = self.pages[1]
         assert isinstance(first_page, BTreePage)
 
-        master_table = Table('sqlite_master', self, first_page)
+        master_table = Table('sqlite_master', self, first_page, signatures)
         self._table_columns.update(constants.SQLITE_TABLE_COLUMNS)
 
         for master_leaf in master_table.leaves:
@@ -491,7 +493,7 @@ class SQLite_DB(object):
 
         for table_name, rootpage in self._table_roots.items():
             try:
-                table_obj = Table(table_name, self, rootpage)
+                table_obj = Table(table_name, self, rootpage, signatures)
             except Exception as ex:  # pylint:disable=W0703
                 pdb.set_trace()
                 _LOGGER.warning(

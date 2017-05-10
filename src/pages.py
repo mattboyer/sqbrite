@@ -24,7 +24,7 @@ import pdb
 import struct
 
 from . import _LOGGER
-from .records import (Record, MalformedRecord)
+from .record import (Record, MalformedRecord)
 from .tuples import SQLite_btree_page_header
 from .utils import (Varint, IndexDict)
 
@@ -131,10 +131,11 @@ class BTreePage(Page):
         0x0D:   "Table Leaf",
     }
 
-    def __init__(self, page_idx, db):
+    def __init__(self, page_idx, db, heuristics):
         # XXX We don't know a page's type until we've had a look at the header.
         # Or do we?
         super().__init__(page_idx, db)
+        self._heuristics = heuristics
         self._header_size = 8
         page_header_bytes = self._get_btree_page_header()
         self._btree_header = SQLite_btree_page_header(
@@ -386,7 +387,7 @@ class BTreePage(Page):
         # to the start. That means we don't know where a cell header will
         # start, but I suppose we can take a guess
         table = self.table
-        if not table or table.name not in heuristics:
+        if not table or table.name not in self._heuristics:
             return
 
         _LOGGER.info("Attempting to recover records from freeblocks")
@@ -407,7 +408,7 @@ class BTreePage(Page):
 
             # TODO Maybe we need to guess the record header lengths rather than
             # try and read them from the freeblocks
-            for header_start in heuristics[table.name](freeblock_bytes):
+            for header_start in self._heuristics[table.name](freeblock_bytes):
                 _LOGGER.debug(
                     (
                         "Trying potential record header start at "
