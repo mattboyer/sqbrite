@@ -20,6 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import logging
 import os
 import xdg.BaseDirectory
 
@@ -33,3 +34,7 @@ USER_YAML_PATH = os.path.join(
 )
 
 BUILTIN_YAML = 'magic/sqbrite.yaml'
+
+logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s')
+_LOGGER = logging.getLogger('SQLite recovery')
+_LOGGER.setLevel(logging.INFO)

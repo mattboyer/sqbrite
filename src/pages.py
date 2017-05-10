@@ -20,6 +20,14 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import pdb
+import struct
+
+from . import _LOGGER
+from .records import (Record, MalformedRecord)
+from .tuples import SQLite_btree_page_header
+from .utils import (Varint, IndexDict)
+
 
 class Page(object):
     def __init__(self, page_idx, db):
