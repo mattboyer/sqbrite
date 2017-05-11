@@ -20,9 +20,9 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from .utils import decode_twos_complement
-
 import struct
+
+from .utils import decode_twos_complement
 
 
 class MalformedField(Exception):
