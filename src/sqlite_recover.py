@@ -573,6 +573,7 @@ class SQLite_DB(object):
                 needle_offset = match.start()
                 page_offsets.append(needle_offset)
             if page_offsets:
+                match_found = True
                 _LOGGER.info(
                     "Found search term in page %r @ offset(s) %s",
                     page, ', '.join(str(offset) for offset in page_offsets)
