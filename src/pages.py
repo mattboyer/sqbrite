@@ -111,6 +111,7 @@ class OverflowPage(Page):
     def __init__(self, page_idx, db):
         super().__init__(page_idx, db)
         self._parse()
+        self._parent = None
 
     def _parse(self):
         # TODO We should have parsing here for the next page index in the
@@ -119,7 +120,7 @@ class OverflowPage(Page):
 
     def __repr__(self):
         return "<SQLite Overflow Page {0}. Continuation of {1}>".format(
-            self.idx, self.parent.idx
+            self.idx, self.parent
         )
 
 
@@ -241,6 +242,13 @@ class BTreePage(Page):
         elif self.btree_header.page_type == 0x0D:
             self.parse_table_leaf_cells()
         self.parse_freeblocks()
+        # In the event that we have an interior cell, we should probably
+        # consider the space between the header and the first cell to be a
+        # freeblock
+        if self.btree_header.page_type == 0x05 and self.btree_header.first_freeblock_offset == 0:
+            self._freeblocks[self._header_size] = bytes(self)[
+                self._header_size:min(self._cell_ptr_array) - self._header_size
+            ]
 
     def parse_table_interior_cells(self):
         if self.btree_header.page_type != 0x05:
