@@ -283,6 +283,30 @@ class SQLite_DB(object):
             parsed_leaves
         )
 
+    def identify_page_types(self):
+        for idx, page in self.pages.items():
+            if type(page) is not Page:
+                continue
+
+            # If the first 4 bytes of the page are \x00, then there's a good
+            # chance this is the last page of an overflow sequence
+            # More generally, if these first 4 bytes are an integer that's
+            # smaller than the page count, we might reasonably guess that we're
+            # looking at an overflow continuation page
+            try:
+                #import ipdb; ipdb.set_trace()
+                #pass
+                first_four_bytes = bytes(page)[:4]
+                next_oflow_idx, = struct.unpack(
+                    r'>I', first_four_bytes
+                )
+                if next_oflow_idx <= len(self.pages):
+                    self.pages[idx] = OverflowPage(idx, self)
+            except ValueError:
+                # This page isn't a valid btree page! BOOO
+                continue
+            pass
+
     def populate_overflow_pages(self):
         # Knowledge of the overflow pages can come from the pointer map (easy),
         # or the parsing of individual cells in table leaf pages (hard)
@@ -372,6 +396,13 @@ class SQLite_DB(object):
             "Ptrmap summary: %d pages, %r",
             len(ptrmap_page_indices), ptrmap_page_indices
         )
+
+    def experimental(self):
+        page_of_interest = self.pages[29]
+        import ipdb; ipdb.set_trace()
+        page_of_interest.recover_freeblock_records()
+        page_of_interest.print_recovered_records()
+        pass
 
     def populate_btree_pages(self):
         # TODO Should this use table information instead of scanning all pages?
@@ -620,15 +651,22 @@ def _load_db(sqlite_path):
     # use of generic btree page objects acceptable?
     db.populate_btree_pages()
 
+    # Try and do something sensible with any stragglers
+    db.identify_page_types()
+
     db.map_tables()
 
     # We need a first pass to process tables that are disconnected
     # from their table's root page
     db.reparent_orphaned_table_leaf_pages()
 
+    db.experimental()
+
     # All pages should now be represented by specialised objects
     assert(all(isinstance(p, Page) for p in db.pages.values()))
     assert(not any(type(p) is Page for p in db.pages.values()))
+    import pprint
+    pprint.pprint(db.pages)
     return db
 
 
