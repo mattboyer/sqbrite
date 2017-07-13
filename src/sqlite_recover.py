@@ -29,7 +29,7 @@ import sqlite3
 from . import PROJECT_DESCRIPTION, PROJECT_NAME
 from . import _LOGGER
 from .db import SQLite_DB
-from .heuristics import load_heuristics, iter_heur
+from .heuristics import load_heuristics, iter_groupings
 from .pages import Page
 
 
@@ -167,7 +167,7 @@ def find_in_db(args):
 
 def list_supported():
     load_heuristics()
-    for db in iter_heur():
+    for db in iter_groupings():
         print(db)
 
 
@@ -224,7 +224,7 @@ def main():
         help='Output directory'
     )
     csv_parser.add_argument(
-        '-d', 'database-name',
+        '-d', '--database-name',
         nargs=1,
         default=None,
         help='Database name'

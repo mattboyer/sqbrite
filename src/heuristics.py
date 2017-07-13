@@ -57,6 +57,7 @@ def load_heuristics():
             yaml_string = yaml_string.decode('utf-8')
 
         raw_yaml = yaml.load(yaml_string)
+        # TODO Find a more descriptive term than "table grouping"
         for table_grouping, tables in raw_yaml.items():
             _LOGGER.debug(
                 "Loading raw_yaml for table grouping \"%s\"",
@@ -85,6 +86,12 @@ def load_heuristics():
             raise SystemError("Malformed user magic file")
 
 
-def iter_heur():
+def iter_groupings():
     for db_name in sorted(heuristics.keys()):
         yield db_name
+
+
+def iter_all_tables():
+    for db in iter_groupings():
+        for table in heuristics[db].keys():
+            yield (db, table)
