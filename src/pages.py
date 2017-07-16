@@ -380,15 +380,28 @@ class BTreePage(Page):
             )
             record.print_fields(table=self.table)
 
-    def recover_freeblock_records(self):
+    def recover_freeblock_records(self, grouping):
         # If we're lucky (i.e. if no overwriting has taken place), we should be
         # able to find whole record headers in freeblocks.
         # We need to start from the end of the freeblock and work our way back
         # to the start. That means we don't know where a cell header will
         # start, but I suppose we can take a guess
-        table = self.table
-        if not table or table.name not in self._heuristics:
+
+        if not self.table:
             return
+
+        try:
+            table_heuristic = self._heuristics.get_heuristic(
+                self.table, grouping
+            )
+        except ValueError as ex:
+            _LOGGER.error(str(ex))
+            return
+
+        _LOGGER.info(
+            "Using heuristic %r on table \"%s\"",
+            table_heuristic, self.table,
+        )
 
         _LOGGER.info("Attempting to recover records from freeblocks")
         for freeblock_idx, freeblock_offset in enumerate(self._freeblocks):
@@ -408,7 +421,7 @@ class BTreePage(Page):
 
             # TODO Maybe we need to guess the record header lengths rather than
             # try and read them from the freeblocks
-            for header_start in self._heuristics[table.name](freeblock_bytes):
+            for header_start in table_heuristic(freeblock_bytes):
                 _LOGGER.debug(
                     (
                         "Trying potential record header start at "
