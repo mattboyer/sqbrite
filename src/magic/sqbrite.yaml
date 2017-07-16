@@ -31,4 +31,30 @@ iOs:
     magic: !!binary "AFU="
     offset: 1
 
+
+# WeChat/微信
+Tencent:
+  # That looks like a highly variable table name :(
+  # 2017-07-11 21:28:06,007 INFO:   Field 0 (0 bytes), type 9: 1
+  # 2017-07-11 21:28:06,008 INFO:   Field 1 (0 bytes), type 0: None
+  # 2017-07-11 21:28:06,008 INFO:   Field 2 (8 bytes), type 6: 7632423385462157436
+  # 2017-07-11 21:28:06,008 INFO:   Field 3 (4 bytes), type 4: 1498986666
+  # 2017-07-11 21:28:06,008 INFO:   Field 4 (7554 bytes), type 15121: <msg>
+  #     <appmsg appid="" sdkver="0">
+  # Long XML blob elided
+  # </msg>
+  # 2017-07-11 21:28:06,009 INFO:   Field 5 (1 bytes), type 1: 4
+  # 2017-07-11 21:28:06,009 INFO:   Field 6 (0 bytes), type 9: 1
+  # 2017-07-11 21:28:06,009 INFO:   Field 7 (1 bytes), type 1: 49
+  # 2017-07-11 21:28:06,009 INFO:   Field 8 (0 bytes), type 9: 1
+  #
+  # We can probably use the first 4 fields to form a heuristic for the header
+  # ipdb> pp (self.pages[38].cells[0][1]).header
+  # b'\x0b\t\x00\x06\x04\xf6\x11\x01\t\x01\t'
+  #
+  # We should have \x09\x00\x06\x04
+  Chat_fcc227a513806da146549ba5895d00bc:
+    name_regex: "^Chat_[0-9a-f]{32}$"
+    magic: !!binary "CQAGBA=="
+    offset: 1
 ...
