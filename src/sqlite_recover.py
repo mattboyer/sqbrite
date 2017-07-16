@@ -168,7 +168,7 @@ def find_in_db(args):
 def list_supported(args):  # pylint:disable=W0613
     registry = HeuristicsRegistry()
     registry.load_heuristics()
-    for db in registry.iter_groupings():
+    for db in registry.groupings:
         print(db)
 
 
@@ -226,7 +226,7 @@ def main():
     )
     csv_parser.add_argument(
         '-d', '--database-name',
-        nargs=1,
+        nargs='?',
         default=None,
         help='Database name'
     )
@@ -276,7 +276,7 @@ def main():
     )
     undelete_parser.add_argument(
         '-d', '--database-name',
-        nargs=1,
+        nargs='?',
         default=None,
         help='Database name'
     )

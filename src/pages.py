@@ -390,25 +390,12 @@ class BTreePage(Page):
         if not self.table:
             return
 
-        if grouping is not None:
-            for table in self._heuristics[grouping]:
-                if self.table.name == table:
-                    break
-            else:
-                return
-        else:
-            for grouping, table in self._heuristics.iter_all_tables():
-                if self.table.name == table:
-                    break
-            else:
-                return
-
+        table_heuristic = self._heuristics.get_heuristic(self.table, grouping)
         _LOGGER.info(
-            "Using heuristics for table \"%s\" from grouping \"%s\"",
-            table, grouping
+            "Using heuristic %r on table \"%s\"",
+            table_heuristic, self.table,
         )
 
-        table = self.table
         _LOGGER.info("Attempting to recover records from freeblocks")
         for freeblock_idx, freeblock_offset in enumerate(self._freeblocks):
             freeblock_bytes = self._freeblocks[freeblock_offset]
@@ -427,9 +414,6 @@ class BTreePage(Page):
 
             # TODO Maybe we need to guess the record header lengths rather than
             # try and read them from the freeblocks
-            #
-            # self._heuristics is a {grouping: {tables}} dict now!!
-            table_heuristic = self._heuristics[grouping][table.name]
             for header_start in table_heuristic(freeblock_bytes):
                 _LOGGER.debug(
                     (

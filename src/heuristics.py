@@ -29,33 +29,45 @@ from . import _LOGGER
 from . import PROJECT_NAME, USER_YAML_PATH, BUILTIN_YAML
 
 
+class Heuristic(object):
+    def __init__(self, magic, offset, grouping, table):
+        self._offset = offset
+        self._table = table
+        self._grouping = grouping
+        self._magic_re = re.compile(magic)
+
+    def __repr__(self):
+        return "<Record heuristic for table \"{0}\"({1})>".format(
+            self._table, self._grouping
+        )
+
+    def __call__(self, freeblock_bytes):
+        # We need to unwind the full set of matches so we can traverse it
+        # in reverse
+        all_matches = [
+            match for match in self._magic_re.finditer(freeblock_bytes)
+        ]
+        for magic_match in all_matches[::-1]:
+            header_start = magic_match.start() - self._offset
+            if header_start < 0:
+                _LOGGER.debug("Header start outside of freeblock!")
+                break
+            yield header_start
+
+    def match(self, table):
+        pass
+
+
 class HeuristicsRegistry(dict):
 
     def __init__(self):
         super().__init__(self)
 
     @staticmethod
-    def heuristic_factory(magic, offset):
+    def check_heuristic(magic, offset):
         assert(isinstance(magic, bytes))
         assert(isinstance(offset, int))
         assert(offset >= 0)
-
-        # We only need to compile the regex once
-        magic_re = re.compile(magic)
-
-        def generic_heuristic(freeblock_bytes):
-            # We need to unwind the full set of matches so we can traverse it
-            # in reverse
-            all_matches = [
-                match for match in magic_re.finditer(freeblock_bytes)
-            ]
-            for magic_match in all_matches[::-1]:
-                header_start = magic_match.start()-offset
-                if header_start < 0:
-                    _LOGGER.debug("Header start outside of freeblock!")
-                    break
-                yield header_start
-        return generic_heuristic
 
     def _load_from_yaml(self, yaml_string):
         if isinstance(yaml_string, bytes):
@@ -70,8 +82,12 @@ class HeuristicsRegistry(dict):
             )
             grouping_tables = {}
             for table_name, table_props in tables.items():
-                grouping_tables[table_name] = self.heuristic_factory(
+                self.check_heuristic(
                     table_props['magic'], table_props['offset']
+                )
+                grouping_tables[table_name] = Heuristic(
+                    table_props['magic'], table_props['offset'],
+                    table_grouping, table_name
                 )
                 _LOGGER.debug("Loaded heuristics for \"%s\"", table_name)
             self[table_grouping] = grouping_tables
@@ -91,11 +107,44 @@ class HeuristicsRegistry(dict):
             except KeyError:
                 raise SystemError("Malformed user magic file")
 
-    def iter_groupings(self):
+    @property
+    def groupings(self):
         for db_name in sorted(self.keys()):
             yield db_name
 
-    def iter_all_tables(self):
-        for db in self.iter_groupings():
+    @property
+    def all_tables(self):
+        for db in self.groupings:
             for table in self[db].keys():
                 yield (db, table)
+
+    def get_heuristic(self, db_table, grouping):
+        table = None
+        if grouping is not None:
+            if grouping in self:
+                for table in self[grouping]:
+                    if db_table.name == table:
+                        break
+                else:
+                    # We haven't found a match within the grouping... what
+                    # shall we do?
+                    raise ValueError("No heuristic found")
+
+                return self[grouping][table]
+
+            else:
+                raise ValueError(
+                    "No heuristic defined for table \"%s\" in grouping \"%s\"",
+                    db_table.name, grouping
+                )
+        else:
+            for grouping, table in self.all_tables:
+                if db_table.name == table:
+                    break
+            else:
+                raise ValueError(
+                    "No heuristic defined for table \"%s\" in any grouping",
+                    db_table.name
+                )
+
+            return self[grouping][table]
