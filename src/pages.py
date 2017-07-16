@@ -24,7 +24,6 @@ import pdb
 import struct
 
 from . import _LOGGER
-from .heuristics import iter_all_tables
 from .record import (Record, MalformedRecord)
 from .tuples import SQLite_btree_page_header
 from .utils import (Varint, IndexDict)
@@ -381,30 +380,33 @@ class BTreePage(Page):
             )
             record.print_fields(table=self.table)
 
-    def recover_freeblock_records(self):
+    def recover_freeblock_records(self, grouping):
         # If we're lucky (i.e. if no overwriting has taken place), we should be
         # able to find whole record headers in freeblocks.
         # We need to start from the end of the freeblock and work our way back
         # to the start. That means we don't know where a cell header will
         # start, but I suppose we can take a guess
 
-        # self._heuristics is a {grouping: {tables}} dict now!!
-        # TODO For now, just iterate on all groupings. Later we'll consider
-        # passing in a grouping name from the command line options
-        try:
-            if not self.table:
-                return
-        except Exception as ex:
-            import pdb; pdb.set_trace()
-            pass
-
-        # But really, shouldn't we have a heuristics registry instance?
-        for db, table in iter_all_tables():
-            if self.table.name == table:
-                break
-        else:
+        if not self.table:
             return
-        _LOGGER.info("Using heuristics for table \"%s\" from grouping \"%s\"", table, db)
+
+        if grouping is not None:
+            for table in self._heuristics[grouping]:
+                if self.table.name == table:
+                    break
+            else:
+                return
+        else:
+            for grouping, table in self._heuristics.iter_all_tables():
+                if self.table.name == table:
+                    break
+            else:
+                return
+
+        _LOGGER.info(
+            "Using heuristics for table \"%s\" from grouping \"%s\"",
+            table, grouping
+        )
 
         table = self.table
         _LOGGER.info("Attempting to recover records from freeblocks")
@@ -427,7 +429,8 @@ class BTreePage(Page):
             # try and read them from the freeblocks
             #
             # self._heuristics is a {grouping: {tables}} dict now!!
-            for header_start in self._heuristics[db][table.name](freeblock_bytes):
+            table_heuristic = self._heuristics[grouping][table.name]
+            for header_start in table_heuristic(freeblock_bytes):
                 _LOGGER.debug(
                     (
                         "Trying potential record header start at "

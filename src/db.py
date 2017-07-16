@@ -28,7 +28,6 @@ import struct
 
 from . import constants
 from . import _LOGGER
-from .heuristics import heuristics
 from .record import Record
 from .pages import (
     Page, OverflowPage, FreelistLeafPage, FreelistTrunkPage, BTreePage,
@@ -44,10 +43,11 @@ signatures = {}
 
 
 class SQLite_DB(object):
-    def __init__(self, path):
+    def __init__(self, path, heuristics_registry):
         self._path = path
         self._page_types = {}
         self._header = self.parse_header()
+        self._registry = heuristics_registry
 
         self._page_cache = None
         # Actual page objects go here
@@ -326,7 +326,8 @@ class SQLite_DB(object):
                 pass
 
             try:
-                page_obj = BTreePage(page_idx, self, heuristics)
+                # We need to pass in the singleton registry instance
+                page_obj = BTreePage(page_idx, self, self._registry)
             except ValueError:
                 # This page isn't a valid btree page. This can happen if we
                 # don't have a ptrmap to guide us

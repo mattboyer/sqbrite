@@ -105,14 +105,14 @@ class Table(object):
         for leaf_page in self._leaves:
             yield leaf_page
 
-    def recover_records(self):
+    def recover_records(self, grouping):
         for page in self.leaves:
             assert isinstance(page, BTreePage)
             if not page.freeblocks:
                 continue
 
             _LOGGER.info("%r", page)
-            page.recover_freeblock_records()
+            page.recover_freeblock_records(grouping)
             page.print_recovered_records()
 
     def csv_dump(self, out_dir):

@@ -29,7 +29,7 @@ import sqlite3
 from . import PROJECT_DESCRIPTION, PROJECT_NAME
 from . import _LOGGER
 from .db import SQLite_DB
-from .heuristics import load_heuristics, iter_groupings
+from .heuristics import HeuristicsRegistry
 from .pages import Page
 
 
@@ -54,10 +54,10 @@ def gen_output_dir(db_path):
 
 def _load_db(sqlite_path):
     _LOGGER.info("Processing %s", sqlite_path)
+    registry = HeuristicsRegistry()
+    registry.load_heuristics()
 
-    load_heuristics()
-
-    db = SQLite_DB(sqlite_path)
+    db = SQLite_DB(sqlite_path, registry)
     _LOGGER.info("Database: %r", db)
 
     db.populate_freelist_pages()
@@ -91,7 +91,7 @@ def dump_to_csv(args):
     for table_name in sorted(db.tables):
         table = db.tables[table_name]
         _LOGGER.info("Table \"%s\"", table)
-        table.recover_records()
+        table.recover_records(args.database_name)
         table.csv_dump(out_dir)
 
 
@@ -109,7 +109,7 @@ def undelete(args):
         for table_name in sorted(db.tables):
             table = db.tables[table_name]
             _LOGGER.info("Table \"%s\"", table)
-            table.recover_records()
+            table.recover_records(args.database_name)
 
             failed_inserts = 0
             constraint_violations = 0
@@ -165,9 +165,10 @@ def find_in_db(args):
     db.grep(args.needle)
 
 
-def list_supported():
-    load_heuristics()
-    for db in iter_groupings():
+def list_supported(args):  # pylint:disable=W0613
+    registry = HeuristicsRegistry()
+    registry.load_heuristics()
+    for db in registry.iter_groupings():
         print(db)
 
 
@@ -230,7 +231,7 @@ def main():
         help='Database name'
     )
 
-    list_parser = subcmd_parsers.add_parser(
+    list_parser = subcmd_parsers.add_parser(  # pylint:disable=W0612
         'list',
         parents=[verbose_parser],
         help='Displays supported DB types',
@@ -239,7 +240,6 @@ def main():
             'known to {}'.format(PROJECT_NAME)
         ),
     )
-    list_parser
 
     grep_parser = subcmd_parsers.add_parser(
         'grep',
@@ -273,6 +273,12 @@ def main():
     undelete_parser.add_argument(
         'output_path',
         help='Output database path'
+    )
+    undelete_parser.add_argument(
+        '-d', '--database-name',
+        nargs=1,
+        default=None,
+        help='Database name'
     )
 
     cli_args = cli_parser.parse_args()
