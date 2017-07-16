@@ -141,8 +141,8 @@ class HeuristicsRegistry(dict):
 
         else:
             raise ValueError(
-                "No heuristic defined for table \"%s\" in grouping \"%s\"",
-                db_table.name, grouping
+                "No heuristic defined for table \"%s\" in grouping \"%s\"" %
+                (db_table.name, grouping)
             )
 
     def _get_heuristic_in_all_groupings(self, db_table):
@@ -153,8 +153,8 @@ class HeuristicsRegistry(dict):
                 break
         else:
             raise ValueError(
-                "No heuristic defined for table \"%s\" in any grouping",
-                db_table.name
+                "No heuristic defined for table \"%s\" in any grouping" %
+                (db_table.name,)
             )
 
         return self[grouping][heuristic_name]
