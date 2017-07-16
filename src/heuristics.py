@@ -30,15 +30,19 @@ from . import PROJECT_NAME, USER_YAML_PATH, BUILTIN_YAML
 
 
 class Heuristic(object):
-    def __init__(self, magic, offset, grouping, table):
+    def __init__(self, magic, offset, grouping, table, name_regex=None):
         self._offset = offset
-        self._table = table
+        self._table_name = table
         self._grouping = grouping
         self._magic_re = re.compile(magic)
 
+        self._table_name_regex = None
+        if name_regex is not None:
+            self._table_name_regex = re.compile(name_regex)
+
     def __repr__(self):
         return "<Record heuristic for table \"{0}\"({1})>".format(
-            self._table, self._grouping
+            self._table_name, self._grouping
         )
 
     def __call__(self, freeblock_bytes):
@@ -55,7 +59,10 @@ class Heuristic(object):
             yield header_start
 
     def match(self, table):
-        pass
+        if self._table_name_regex is not None:
+            return bool(self._table_name_regex.match(table.name))
+        else:
+            return self._table_name == table.name
 
 
 class HeuristicsRegistry(dict):
@@ -87,7 +94,8 @@ class HeuristicsRegistry(dict):
                 )
                 grouping_tables[table_name] = Heuristic(
                     table_props['magic'], table_props['offset'],
-                    table_grouping, table_name
+                    table_grouping, table_name,
+                    name_regex=table_props.get('name_regex')
                 )
                 _LOGGER.debug("Loaded heuristics for \"%s\"", table_name)
             self[table_grouping] = grouping_tables
@@ -119,18 +127,20 @@ class HeuristicsRegistry(dict):
                 yield (db, table)
 
     def get_heuristic(self, db_table, grouping):
-        table = None
+        heuristic_name = None
+        import pdb
+        pdb.set_trace()
         if grouping is not None:
             if grouping in self:
-                for table in self[grouping]:
-                    if db_table.name == table:
+                for heuristic_name in self[grouping]:
+                    if self[grouping][heuristic_name].match(db_table):
                         break
                 else:
                     # We haven't found a match within the grouping... what
                     # shall we do?
                     raise ValueError("No heuristic found")
 
-                return self[grouping][table]
+                return self[grouping][heuristic_name]
 
             else:
                 raise ValueError(
@@ -138,8 +148,8 @@ class HeuristicsRegistry(dict):
                     db_table.name, grouping
                 )
         else:
-            for grouping, table in self.all_tables:
-                if db_table.name == table:
+            for grouping, heuristic_name in self.all_tables:
+                if self[grouping][heuristic_name].match(db_table):
                     break
             else:
                 raise ValueError(
@@ -147,4 +157,4 @@ class HeuristicsRegistry(dict):
                     db_table.name
                 )
 
-            return self[grouping][table]
+            return self[grouping][heuristic_name]
