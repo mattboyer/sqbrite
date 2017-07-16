@@ -128,8 +128,6 @@ class HeuristicsRegistry(dict):
 
     def get_heuristic(self, db_table, grouping):
         heuristic_name = None
-        import pdb
-        pdb.set_trace()
         if grouping is not None:
             if grouping in self:
                 for heuristic_name in self[grouping]:
