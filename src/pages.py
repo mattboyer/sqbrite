@@ -391,7 +391,9 @@ class BTreePage(Page):
             return
 
         try:
-            table_heuristic = self._heuristics.get_heuristic(self.table, grouping)
+            table_heuristic = self._heuristics.get_heuristic(
+                self.table, grouping
+            )
         except ValueError as ex:
             _LOGGER.error(str(ex))
             return
