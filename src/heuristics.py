@@ -126,33 +126,41 @@ class HeuristicsRegistry(dict):
             for table in self[db].keys():
                 yield (db, table)
 
-    def get_heuristic(self, db_table, grouping):
+    def _get_heuristic_in_grouping(self, db_table, grouping):
         heuristic_name = None
-        if grouping is not None:
-            if grouping in self:
-                for heuristic_name in self[grouping]:
-                    if self[grouping][heuristic_name].match(db_table):
-                        break
-                else:
-                    # We haven't found a match within the grouping... what
-                    # shall we do?
-                    raise ValueError("No heuristic found")
-
-                return self[grouping][heuristic_name]
-
-            else:
-                raise ValueError(
-                    "No heuristic defined for table \"%s\" in grouping \"%s\"",
-                    db_table.name, grouping
-                )
-        else:
-            for grouping, heuristic_name in self.all_tables:
+        if grouping in self:
+            for heuristic_name in self[grouping]:
                 if self[grouping][heuristic_name].match(db_table):
                     break
             else:
-                raise ValueError(
-                    "No heuristic defined for table \"%s\" in any grouping",
-                    db_table.name
-                )
+                # We haven't found a match within the grouping... what
+                # shall we do?
+                raise ValueError("No heuristic found")
 
             return self[grouping][heuristic_name]
+
+        else:
+            raise ValueError(
+                "No heuristic defined for table \"%s\" in grouping \"%s\"",
+                db_table.name, grouping
+            )
+
+    def _get_heuristic_in_all_groupings(self, db_table):
+        grouping = None
+        heuristic_name = None
+        for grouping, heuristic_name in self.all_tables:
+            if self[grouping][heuristic_name].match(db_table):
+                break
+        else:
+            raise ValueError(
+                "No heuristic defined for table \"%s\" in any grouping",
+                db_table.name
+            )
+
+        return self[grouping][heuristic_name]
+
+    def get_heuristic(self, db_table, grouping):
+        if grouping is not None:
+            return self._get_heuristic_in_grouping(db_table, grouping)
+        else:
+            return self._get_heuristic_in_all_groupings(db_table)
