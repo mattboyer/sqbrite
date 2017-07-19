@@ -150,7 +150,6 @@ class BTreePage(Page):
         self._overflow_threshold = self.usable_size - 35
 
         if self._btree_header.page_type not in BTreePage.btree_page_types:
-            # pdb.set_trace()
             raise ValueError
 
         # We have a twelve-byte header, need to read it again
@@ -445,6 +444,10 @@ class BTreePage(Page):
                     record_bytes = freeblock_bytes[
                         header_start:header_start+self._overflow_threshold
                     ]
+                    # We do get a match for the big blob of xml in page #29,
+                    # but instantiating a Record object from it fails
+                    if self.idx == 29:
+                        pdb.set_trace()
                     record_obj = Record(record_bytes)
                 except MalformedRecord:
                     # This isn't a well-formed record, let's move to the next

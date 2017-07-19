@@ -69,4 +69,5 @@ NON_BTREE_PAGE_TYPES = (
     FIRST_OFLOW_PAGE,
     NON_FIRST_OFLOW_PAGE,
     PTRMAP_PAGE,
+    # This is a mess, we've a mix of numeric IDs and strings
 )

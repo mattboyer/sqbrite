@@ -89,6 +89,18 @@ class Record(object):
 
         col_idx = 0
         field_offset = int(header_length_varint)
+
+        # Something weird happens for the freeblock in page 29!
+        # We end up with:
+        # -> serial_type_varint = Varint(
+        # (Pdb) pp self._fields
+        # {0: <Field 0: 1 (0 bytes)>,
+        #          1: <Field 1: None (0 bytes)>,
+        #           2: <Field 2: 7632423385462157436 (8 bytes)>}
+        # ]
+        # (Pdb) pp self._header_bytes
+        # b'\x0b\t\x00\x06\x04\xf6\x11\x01\t\x01\t'
+
         while header_offset < int(header_length_varint):
             serial_type_varint = Varint(
                 bytes(self)[header_offset:9 + header_offset]

@@ -64,6 +64,20 @@ class SQLite_DB(object):
         self._freelist_leaves = []
         self._freelist_btree_pages = []
 
+    def _experimental(self):
+        pdb.set_trace()
+        try:
+            # Page 33 appears to be a well-formed(?) overflow page
+            # Page 29 does appear to be a former BTreePage
+            page_of_interest = BTreePage(29, self, self._registry)
+            # Page 29 is a perfectly valid interior table, AFAICT
+        except ValueError:
+            pass
+        page_of_interest.parse_cells()
+        # In order for this to work, we have to have knowledge of the tables
+        page_of_interest.recover_freeblock_records('Tencent')
+        pass
+
     @property
     def ptrmap(self):
         return self._ptrmap
@@ -318,6 +332,8 @@ class SQLite_DB(object):
         page_idx = 1
         while page_idx <= self._header.size_in_pages:
             try:
+                # These are types of pages that are *KNOWN* to not be btree
+                # pages
                 if self._page_types[page_idx] in \
                         constants.NON_BTREE_PAGE_TYPES:
                     page_idx += 1
@@ -326,6 +342,10 @@ class SQLite_DB(object):
                 pass
 
             try:
+                # As far as Page #29 is concerned, the instantiation does *not*
+                # cause a validation error, since it is a valid BTreePage,
+                # albeit a table interior one
+
                 # We need to pass in the singleton registry instance
                 page_obj = BTreePage(page_idx, self, self._registry)
             except ValueError:
@@ -340,6 +360,10 @@ class SQLite_DB(object):
                 continue
 
             page_obj.parse_cells()
+            # We get an exception here because we've instantiated a broken
+            # BTreePage for a page of unknown type and the member field of its
+            # header that describes its type doesn't match any of the valid
+            # B-Tree page type ids
             self._page_types[page_idx] = page_obj.page_type
             self._pages[page_idx] = page_obj
             page_idx += 1
@@ -414,6 +438,7 @@ class SQLite_DB(object):
 
     def map_tables(self):
         first_page = self.pages[1]
+        import pdb; pdb.set_trace()
         assert isinstance(first_page, BTreePage)
 
         master_table = Table('sqlite_master', self, first_page, signatures)
