@@ -173,6 +173,11 @@ class SQLite_DB(object):
                 "Parsing freelist trunk page %d",
                 freelist_trunk_idx
             )
+
+            # Set _page_types value for this page
+            self._page_types[freelist_trunk_idx] = \
+                constants.FREELIST_TRUNK_PAGE
+
             trunk_bytes = bytes(self.pages[freelist_trunk_idx])
 
             next_freelist_trunk_page_idx, num_leaf_pages = struct.unpack(
