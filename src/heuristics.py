@@ -80,7 +80,7 @@ class HeuristicsRegistry(dict):
         if isinstance(yaml_string, bytes):
             yaml_string = yaml_string.decode('utf-8')
 
-        raw_yaml = yaml.load(yaml_string)
+        raw_yaml = yaml.load(yaml_string, Loader=yaml.CLoader)
         # TODO Find a more descriptive term than "table grouping"
         for table_grouping, tables in raw_yaml.items():
             _LOGGER.debug(
@@ -104,16 +104,16 @@ class HeuristicsRegistry(dict):
         with resource_stream(PROJECT_NAME, BUILTIN_YAML) as builtin:
             try:
                 self._load_from_yaml(builtin.read())
-            except KeyError:
-                raise SystemError("Malformed builtin magic file")
+            except KeyError as ex:
+                raise SystemError("Malformed builtin magic file") from ex
 
         if not os.path.exists(USER_YAML_PATH):
             return
-        with open(USER_YAML_PATH, 'r') as user_yaml:
+        with open(USER_YAML_PATH, 'r', encoding='UTF8') as user_yaml:
             try:
                 self._load_from_yaml(user_yaml.read())
-            except KeyError:
-                raise SystemError("Malformed user magic file")
+            except KeyError as ex:
+                raise SystemError("Malformed user magic file") from ex
 
     @property
     def groupings(self):

@@ -1,16 +1,28 @@
 language: python
-sudo: false
+os: linux
+arch: arm64
+dist: focal
 
 python:
-        - "3.5"
-        - "3.6"
+  - "3.6"
+  - "3.7"
+  - "3.8"
+  - "3.9"
+  - "3.10"
+
+before_install:
+  - pipenv lock
+
+install:
+  - pipenv sync --dev
 
 before_script:
-        - pip freeze
+  - pipenv graph
 
 script:
-        - tox -v
+  - pipenv run pycodestyle --statistics --exclude=test,docs/conf.py
+  - pipenv run pylint src/
 
 after_success:
-        - cd ${TRAVIS_BUILD_DIR}
-        - source .tox/py3/bin/activate; sqbrite -h
+  - cd ${TRAVIS_BUILD_DIR}
+  - pipenv run sqbrite -h

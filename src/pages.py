@@ -20,7 +20,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import pdb
 import struct
 
 from . import _LOGGER
@@ -199,7 +198,7 @@ class BTreePage(Page):
         try:
             return self.btree_page_types[self._btree_header.page_type]
         except KeyError:
-            pdb.set_trace()
+            # pdb.set_trace()
             _LOGGER.warning(
                 "Unknown B-Tree page type: %d", self._btree_header.page_type
             )
@@ -338,7 +337,7 @@ class BTreePage(Page):
                     "Caught %r while instantiating record %d",
                     ex, int(integer_key)
                 )
-                pdb.set_trace()
+                # pdb.set_trace()
                 raise
 
             self._cells[cell_idx] = (int(integer_key), record_obj)
