@@ -9,7 +9,7 @@ pylint = "*"
 pylint-mccabe = "*"
 
 [packages]
-sqbrite = {path = ".", editable = true}
+sqbrite = {path = "."}
 
 [requires]
 python_version = "3.10"
