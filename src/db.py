@@ -21,7 +21,6 @@
 # SOFTWARE.
 
 import os
-import pdb
 import re
 import stat
 import struct
@@ -91,8 +90,8 @@ class SQLite_DB(object):
     def page_bytes(self, page_idx):
         try:
             return self._page_cache[page_idx]
-        except KeyError:
-            raise ValueError("No cache for page %d", page_idx)
+        except KeyError as ex:
+            raise ValueError(f"No cache for page {page_idx}") from ex
 
     def map_table_page(self, page_idx, table):
         assert isinstance(page_idx, int)
@@ -436,7 +435,7 @@ class SQLite_DB(object):
             try:
                 table_obj = Table(table_name, self, rootpage, signatures)
             except Exception as ex:  # pylint:disable=W0703
-                pdb.set_trace()
+                # pdb.set_trace()
                 _LOGGER.warning(
                     "Caught %r while instantiating table object for \"%s\"",
                     ex, table_name

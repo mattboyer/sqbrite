@@ -75,8 +75,8 @@ class Field(object):
         elif self._type >= 13 and (1 == self._type % 2):
             try:
                 self._value = bytes(self).decode('utf-8')
-            except UnicodeDecodeError:
-                raise MalformedField
+            except UnicodeDecodeError as ex:
+                raise MalformedField from ex
 
         elif self._type >= 12 and (0 == self._type % 2):
             self._value = bytes(self)

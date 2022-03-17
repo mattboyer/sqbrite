@@ -154,7 +154,7 @@ class Table(object):
 
             if csv_temp.tell() > 0:
                 csv_temp.seek(0)
-                with open(csv_path, 'w') as csv_file:
+                with open(csv_path, 'w', encoding='UTF8') as csv_file:
                     csv_file.write(csv_temp.read())
 
     def build_insert_SQL(self, record):

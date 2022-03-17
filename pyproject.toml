@@ -1,0 +1,6 @@
+[build-system]
+# Continue to use setuptools as a build backend, pending a move to Poetry
+requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]

@@ -20,8 +20,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import pdb
-
 from . import _LOGGER
 from .field import (Field, MalformedField)
 from .utils import (Varint, IndexDict)
@@ -98,7 +96,7 @@ class Record(object):
 
             try:
                 col_length, _ = self.column_types[serial_type]
-            except KeyError:
+            except KeyError as col_type_ex:
                 if serial_type >= 13 and (1 == serial_type % 2):
                     col_length = (serial_type - 13) // 2
                 elif serial_type >= 12 and (0 == serial_type % 2):
@@ -106,7 +104,7 @@ class Record(object):
                 else:
                     raise ValueError(
                         "Unknown serial type {}".format(serial_type)
-                    )
+                    ) from col_type_ex
 
             try:
                 field_obj = Field(
@@ -119,13 +117,13 @@ class Record(object):
                     "Caught %r while instantiating field %d (%d)",
                     ex, col_idx, serial_type
                 )
-                raise MalformedRecord
+                raise MalformedRecord from ex
             except Exception as ex:
                 _LOGGER.warning(
                     "Caught %r while instantiating field %d (%d)",
                     ex, col_idx, serial_type
                 )
-                pdb.set_trace()
+                # pdb.set_trace()
                 raise
 
             self._fields[col_idx] = field_obj
