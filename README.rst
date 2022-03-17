@@ -1,8 +1,8 @@
 Bring the shine back into your database with SQBrite!
 =====================================================
 
-.. image:: https://travis-ci.com/mattboyer/sqbrite.svg?branch=master
-    :target: https://travis-ci.com/mattboyer/sqbrite
+.. image:: https://app.travis-ci.com/mattboyer/sqbrite.svg?branch=master
+    :target: https://app.travis-ci.com/mattboyer/sqbrite
     :alt: Continuous Integration status
 
 .. image:: https://scrutinizer-ci.com/g/mattboyer/sqbrite/badges/quality-score.png?b=master
