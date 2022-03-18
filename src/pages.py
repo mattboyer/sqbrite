@@ -310,7 +310,7 @@ class BTreePage(Page):
                     len_overflow = min(
                         len(oflow_page_bytes) - 4,
                         (
-                            total_payload_size - cell_payload_size +
+                            total_payload_size - cell_payload_size -
                             len(overflow_bytes)
                         )
                     )
