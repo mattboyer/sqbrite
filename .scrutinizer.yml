@@ -9,8 +9,8 @@ build:
 
   dependencies:
     before:
-      - 'pip install -r requirements.txt'
+      - 'pipenv install --dev'
 
   tests:
     override:
-      -  pylint-run src/ setup.py version.py
+      -  pipenv run - pylint-run src/
