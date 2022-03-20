@@ -5,12 +5,14 @@ checks:
 
 build:
   environment:
-    python: '3.6.0'
+    python: '3.9.9'
 
   dependencies:
     before:
-      - 'pip install -r requirements.txt'
+      - 'pip install pipenv'
+      - 'pipenv install --dev'
 
   tests:
     override:
-      -  pylint-run src/ setup.py version.py
+      -  py-scrutinizer-run
+      -  pipenv run -- pylint -v -r y src/

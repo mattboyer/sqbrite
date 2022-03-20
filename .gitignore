@@ -2,5 +2,4 @@
 .coverage
 Pipfile.lock
 *.pyc
-RELEASE-VERSION
 sqbrite.egg-info/

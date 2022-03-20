@@ -68,3 +68,9 @@ Limitations
 - The ``undelete`` subcommand may fail when re-inserting deleted rows into a table causes a constraint violation
 - SQBrite cannot recover records deleted with the `SQLite secure_delete pragma <https://www.sqlite.org/pragma.html#pragma_secure_delete>`_ enabled
 - Recovering data from overflow pages that have become Freelist leaf pages is not currently supported
+
+
+Acknowledgments
+---------------
+
+Big thanks to `@tobraha <https://github.com/tobraha>`_ for contributing bugfixes in 2022.
